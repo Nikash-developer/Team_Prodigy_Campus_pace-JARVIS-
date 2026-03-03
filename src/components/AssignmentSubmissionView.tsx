@@ -108,6 +108,7 @@ export const AssignmentSubmissionView: React.FC<{ theme: any }> = ({ theme: t })
     const [isDragOver, setIsDragOver] = useState(false);
     const [showFeedbackModal, setShowFeedbackModal] = useState<Feedback | null>(null);
     const fileInputRef = React.useRef<HTMLInputElement>(null);
+    const uploadSectionRef = React.useRef<HTMLElement>(null);
 
     useEffect(() => {
         if (selectedAssignment.status === 'submitted') {
@@ -236,6 +237,12 @@ export const AssignmentSubmissionView: React.FC<{ theme: any }> = ({ theme: t })
 
     const handleAssignmentSwitch = (assignment: UpcomingAssignment) => {
         setSelectedId(assignment.id);
+        // Smooth scroll to upload area on mobile for better UX
+        if (window.innerWidth < 1024) {
+            setTimeout(() => {
+                uploadSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }, 100);
+        }
     };
 
     const handleDeleteFile = () => {
@@ -305,33 +312,35 @@ export const AssignmentSubmissionView: React.FC<{ theme: any }> = ({ theme: t })
                     </div>
                 </section>
 
-                <section className="space-y-4">
-                    <h3 className={`text-[10px] font-black ${t.muted} uppercase tracking-widest ml-1`}>Recent Feedback</h3>
-                    <div className="space-y-3">
-                        {mockFeedback.map((fb) => (
-                            <motion.div
-                                key={fb.id}
-                                whileHover={{ y: -6, scale: 1.02 }}
-                                whileTap={{ scale: 0.98 }}
-                                onClick={() => setShowFeedbackModal(fb)}
-                                className={`${t.card} p-6 rounded-3xl shadow-sm border ${t.border} cursor-pointer transition-all hover:shadow-2xl hover:border-primary/30 group relative overflow-hidden`}
-                            >
-                                <div className="absolute top-0 right-0 w-16 h-16 bg-primary/5 rounded-full blur-2xl -translate-y-6 translate-x-6" />
-                                <div className="flex justify-between items-start mb-3 relative z-10">
-                                    <span className="text-[9px] font-black text-primary px-3 py-1 bg-primary/10 rounded-full uppercase tracking-wider">{fb.assignmentName}</span>
-                                    <span className={`text-[10px] font-bold ${t.muted}`}>{fb.timeAgo}</span>
-                                </div>
-                                <p className={`text-xs ${t.text} font-medium line-clamp-3 italic mb-5 leading-relaxed relative z-10`}>
-                                    "{fb.quote}"
-                                </p>
-                                <div className="flex items-center gap-3 relative z-10">
-                                    <img src={fb.instructor.avatar} alt={fb.instructor.name} className={`w-7 h-7 rounded-xl border-2 ${t.border} shadow-sm`} />
-                                    <span className={`text-[10px] font-black ${t.muted}`}>{fb.instructor.name}</span>
-                                </div>
-                            </motion.div>
-                        ))}
-                    </div>
-                </section>
+                <div className="hidden lg:block">
+                    <section className="space-y-4">
+                        <h3 className={`text-[10px] font-black ${t.muted} uppercase tracking-widest ml-1`}>Recent Feedback</h3>
+                        <div className="space-y-3">
+                            {mockFeedback.map((fb) => (
+                                <motion.div
+                                    key={fb.id}
+                                    whileHover={{ y: -6, scale: 1.02 }}
+                                    whileTap={{ scale: 0.98 }}
+                                    onClick={() => setShowFeedbackModal(fb)}
+                                    className={`${t.card} p-6 rounded-3xl shadow-sm border ${t.border} cursor-pointer transition-all hover:shadow-2xl hover:border-primary/30 group relative overflow-hidden`}
+                                >
+                                    <div className="absolute top-0 right-0 w-16 h-16 bg-primary/5 rounded-full blur-2xl -translate-y-6 translate-x-6" />
+                                    <div className="flex justify-between items-start mb-3 relative z-10">
+                                        <span className="text-[9px] font-black text-primary px-3 py-1 bg-primary/10 rounded-full uppercase tracking-wider">{fb.assignmentName}</span>
+                                        <span className={`text-[10px] font-bold ${t.muted}`}>{fb.timeAgo}</span>
+                                    </div>
+                                    <p className={`text-xs ${t.text} font-medium line-clamp-3 italic mb-5 leading-relaxed relative z-10`}>
+                                        "{fb.quote}"
+                                    </p>
+                                    <div className="flex items-center gap-3 relative z-10">
+                                        <img src={fb.instructor.avatar} alt={fb.instructor.name} className={`w-7 h-7 rounded-xl border-2 ${t.border} shadow-sm`} />
+                                        <span className={`text-[10px] font-black ${t.muted}`}>{fb.instructor.name}</span>
+                                    </div>
+                                </motion.div>
+                            ))}
+                        </div>
+                    </section>
+                </div>
             </aside>
 
             {/* Main Submission Area */}
@@ -384,6 +393,7 @@ export const AssignmentSubmissionView: React.FC<{ theme: any }> = ({ theme: t })
                         </div>
 
                         <section
+                            ref={uploadSectionRef}
                             onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
                             onDragLeave={() => setIsDragOver(false)}
                             onDrop={handleFileDrop}
@@ -597,6 +607,36 @@ export const AssignmentSubmissionView: React.FC<{ theme: any }> = ({ theme: t })
                                     </div>
                                 </div>
                             </div>
+                        </div>
+
+                        {/* Recent Feedback - Only visible on mobile/tablet here */}
+                        <div className="lg:hidden pt-8 border-t border-dashed border-primary/20">
+                            <section className="space-y-4">
+                                <h3 className={`text-[10px] font-black ${t.muted} uppercase tracking-widest ml-1`}>Recent Feedback</h3>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {mockFeedback.map((fb) => (
+                                        <motion.div
+                                            key={fb.id}
+                                            whileTap={{ scale: 0.98 }}
+                                            onClick={() => setShowFeedbackModal(fb)}
+                                            className={`${t.card} p-6 rounded-3xl shadow-sm border ${t.border} cursor-pointer transition-all hover:border-primary/30 group relative overflow-hidden`}
+                                        >
+                                            <div className="absolute top-0 right-0 w-16 h-16 bg-primary/5 rounded-full blur-2xl -translate-y-6 translate-x-6" />
+                                            <div className="flex justify-between items-start mb-3 relative z-10">
+                                                <span className="text-[9px] font-black text-primary px-3 py-1 bg-primary/10 rounded-full uppercase tracking-wider">{fb.assignmentName}</span>
+                                                <span className={`text-[10px] font-bold ${t.muted}`}>{fb.timeAgo}</span>
+                                            </div>
+                                            <p className={`text-xs ${t.text} font-medium line-clamp-2 italic mb-5 leading-relaxed relative z-10`}>
+                                                "{fb.quote}"
+                                            </p>
+                                            <div className="flex items-center gap-3 relative z-10">
+                                                <img src={fb.instructor.avatar} alt={fb.instructor.name} className={`w-7 h-7 rounded-xl border-2 ${t.border} shadow-sm`} />
+                                                <span className={`text-[10px] font-black ${t.muted}`}>{fb.instructor.name}</span>
+                                            </div>
+                                        </motion.div>
+                                    ))}
+                                </div>
+                            </section>
                         </div>
                     </motion.div>
                 </AnimatePresence>
