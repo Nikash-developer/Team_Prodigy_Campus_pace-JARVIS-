@@ -1381,17 +1381,26 @@ export default function StudentDashboard() {
       formData.append('semester', uploadPaperForm.semester);
       formData.append('examType', uploadPaperForm.type);
 
-      const token = localStorage.getItem('token');
+      // Sanitize token to avoid "Bearer null"
+      const rawToken = localStorage.getItem('token');
+      const authHeader = rawToken && rawToken !== 'undefined' && rawToken !== 'null'
+        ? `Bearer ${rawToken}`
+        : '';
+
       const res = await fetch('/api/upload-paper', {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
-        },
+        headers: authHeader ? { 'Authorization': authHeader } : {},
         body: formData
       });
 
       if (res.ok) {
-        const newPaper = await res.json();
+        let newPaper;
+        try {
+          newPaper = await res.json();
+        } catch (jsonErr) {
+          throw new Error("Server responded successfully but sent invalid data format.");
+        }
+
         setPapers(prev => [newPaper, ...prev]);
 
         // Eco Confetti on Upload Success
@@ -1407,12 +1416,20 @@ export default function StudentDashboard() {
         setUploadPaperForm({ year: '2024', semester: 'Semester 1', type: 'Regular' });
         setUploadPaperFile(null);
       } else {
-        const err = await res.json();
-        alert(`Upload Failed: ${err.error || 'Unknown error'}`);
+        // Handle non-JSON errors (like Vercel production 500 errors)
+        const contentType = res.headers.get("content-type");
+        if (contentType && contentType.indexOf("application/json") !== -1) {
+          const err = await res.json();
+          alert(`Upload Failed: ${err.error || 'Unknown server error'}`);
+        } else {
+          const textErr = await res.text();
+          console.error("Server Error:", textErr);
+          alert(`Upload Failed (Status ${res.status}): The server encountered an error. Please try a smaller file or check your connection.`);
+        }
       }
-    } catch (error) {
-      console.error(error);
-      alert("Error uploading file");
+    } catch (error: any) {
+      console.error("Upload Catch Error:", error);
+      alert(`Error uploading file: ${error.message || "Please check your internet connection or try again later."}`);
     } finally {
       setIsUploadingPaper(false);
     }
