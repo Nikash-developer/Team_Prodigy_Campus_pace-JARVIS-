@@ -6,7 +6,7 @@ import {
   Zap, Plus, Download, ChevronRight, Users,
   CheckCircle2, Clock, AlertCircle, ArrowLeft, ArrowRight,
   Edit3, MessageSquare, Scissors, Type, Maximize2,
-  MoreVertical, Filter, SortDesc, Folder, ClipboardList, Droplets, User, X, Sparkles
+  MoreVertical, Filter, SortDesc, Folder, ClipboardList, Droplets, User, X, Sparkles, Loader2
 } from 'lucide-react';
 import CountUp from 'react-countup';
 import { useAuth } from '../AuthContext';
@@ -789,6 +789,10 @@ export default function FacultyDashboard() {
 function StudentListView({ stats }: { stats: any }) {
   const [selectedStudent, setSelectedStudent] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
+  const [isReportOpen, setIsReportOpen] = useState(false);
+  const [feedbackText, setFeedbackText] = useState("");
+  const [isSending, setIsSending] = useState(false);
 
   const students = [
     {
@@ -903,22 +907,26 @@ function StudentListView({ stats }: { stats: any }) {
             </div>
           </div>
 
-          <div className="flex-1 flex items-end justify-between gap-4 h-64 relative pt-12">
+          <div className="flex-1 flex items-end justify-between gap-4 h-72 relative pt-12">
             {/* Grid lines */}
-            <div className="absolute inset-0 flex flex-col justify-between pointer-events-none pb-4">
-              {[1, 2, 3, 4].map(idx => <div key={idx} className="w-full border-t border-slate-50" />)}
+            <div className="absolute inset-0 flex flex-col justify-between pointer-events-none pb-8 pt-12">
+              {[0, 25, 50, 75, 100].map(val => (
+                <div key={val} className="w-full border-t border-slate-100 flex items-center relative">
+                  <span className="absolute -left-10 text-[9px] font-bold text-slate-300">{val}%</span>
+                </div>
+              ))}
             </div>
 
             {performanceData.map((val, idx) => (
-              <div key={idx} className="flex-1 flex flex-col items-center gap-4 group cursor-pointer relative z-10">
-                <div className="flex-1 w-full flex flex-col justify-end">
+              <div key={idx} className="flex-1 flex flex-col items-center gap-4 group cursor-pointer relative z-10 h-full justify-end">
+                <div className="w-full flex-1 flex flex-col justify-end min-h-0">
                   <motion.div
-                    initial={{ height: 0 }}
+                    initial={{ height: "0%" }}
                     animate={{ height: `${val}%` }}
-                    transition={{ duration: 1, delay: idx * 0.1, type: "spring" }}
-                    className="w-full bg-gradient-to-t from-[#E8F5E9] to-[#22C55E] rounded-t-2xl relative overflow-hidden shadow-sm group-hover:brightness-110 group-hover:shadow-lg transition-all"
+                    transition={{ duration: 1, delay: idx * 0.1, type: "spring", bounce: 0.2 }}
+                    className="w-full bg-gradient-to-t from-[#E8F5E9] to-[#22C55E] rounded-t-2xl relative overflow-hidden shadow-sm group-hover:brightness-105 group-hover:shadow-lg transition-all"
                   >
-                    <div className="absolute top-2 left-1/2 -translate-x-1/2 text-[10px] font-black text-white bg-black/10 px-2 py-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="absolute top-2 left-1/2 -translate-x-1/2 text-[10px] font-black text-white bg-black/30 backdrop-blur-md px-2 py-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
                       {val}%
                     </div>
                   </motion.div>
@@ -1150,13 +1158,145 @@ function StudentListView({ stats }: { stats: any }) {
 
               {/* Action */}
               <div className="p-8 bg-slate-50/80 border-t border-slate-100 flex gap-4">
-                <button className="flex-1 py-4 bg-primary text-white rounded-2xl font-black shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all">
+                <button
+                  onClick={() => setIsFeedbackOpen(true)}
+                  className="flex-1 py-4 bg-primary text-white rounded-2xl font-black shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all"
+                >
                   Send Direct Feedback
                 </button>
-                <button className="px-6 py-4 bg-white text-slate-600 rounded-2xl font-black border border-slate-200 hover:bg-slate-100 transition-all">
+                <button
+                  onClick={() => setIsReportOpen(true)}
+                  className="px-6 py-4 bg-white text-slate-600 rounded-2xl font-black border border-slate-200 hover:bg-slate-100 transition-all"
+                >
                   Full Report
                 </button>
               </div>
+
+              {/* Feedback Overlay */}
+              <AnimatePresence>
+                {isFeedbackOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    className="absolute inset-0 bg-white/95 backdrop-blur-xl z-[210] p-8 flex flex-col"
+                  >
+                    <div className="flex items-center justify-between mb-8">
+                      <div>
+                        <h3 className="text-2xl font-black text-slate-900">Direct Feedback</h3>
+                        <p className="text-sm font-bold text-slate-500">Sending to {selectedStudent.name}</p>
+                      </div>
+                      <button
+                        onClick={() => setIsFeedbackOpen(false)}
+                        className="p-3 hover:bg-slate-100 rounded-2xl transition-all text-slate-400"
+                      >
+                        <X size={20} />
+                      </button>
+                    </div>
+
+                    <textarea
+                      value={feedbackText}
+                      onChange={(e) => setFeedbackText(e.target.value)}
+                      placeholder="Write your constructive feedback here..."
+                      className="flex-1 w-full bg-slate-50 border-2 border-slate-100 rounded-3xl p-6 text-slate-900 font-medium focus:ring-4 focus:ring-primary/10 focus:border-primary transition-all resize-none mb-6"
+                    />
+
+                    <div className="flex gap-4">
+                      <button
+                        disabled={isSending || !feedbackText.trim()}
+                        onClick={() => {
+                          setIsSending(true);
+                          setTimeout(() => {
+                            setIsSending(false);
+                            setIsFeedbackOpen(false);
+                            setFeedbackText("");
+                          }, 1500);
+                        }}
+                        className="flex-1 py-4 bg-primary text-white rounded-2xl font-black shadow-lg shadow-primary/20 disabled:opacity-50 disabled:cursor-not-allowed group relative overflow-hidden"
+                      >
+                        <motion.span animate={isSending ? { y: -40 } : { y: 0 }} className="block">
+                          Send Feedback
+                        </motion.span>
+                        {isSending && (
+                          <motion.div
+                            initial={{ y: 40 }}
+                            animate={{ y: 0 }}
+                            className="absolute inset-0 flex items-center justify-center gap-2"
+                          >
+                            <Loader2 className="animate-spin" size={18} /> Sending...
+                          </motion.div>
+                        )}
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Reports Overlay */}
+              <AnimatePresence>
+                {isReportOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 50 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 50 }}
+                    className="absolute inset-0 bg-slate-50 z-[210] p-8 flex flex-col h-full overflow-hidden"
+                  >
+                    <div className="flex items-center justify-between mb-8 shrink-0">
+                      <div>
+                        <h3 className="text-2xl font-black text-slate-900">Academic Reports</h3>
+                        <p className="text-sm font-bold text-slate-500">Historical performance data</p>
+                      </div>
+                      <button
+                        onClick={() => setIsReportOpen(false)}
+                        className="p-3 bg-white hover:bg-slate-100 rounded-2xl shadow-sm border border-slate-200 transition-all text-slate-400"
+                      >
+                        <X size={20} />
+                      </button>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto space-y-4 pr-2 styled-scrollbar pb-6">
+                      {[
+                        { title: "Semester 1 Outcomes", date: "Jan 12, 2024", score: "94%", tag: "Term" },
+                        { title: "Mid-Term Assessment", date: "Feb 05, 2024", score: "88%", tag: "Exam" },
+                        { title: "Lab Research Thesis", date: "Feb 20, 2024", score: "91%", tag: "Research" },
+                        { title: "Interdisciplinary Project", date: "Mar 02, 2024", score: "A+", tag: "Project" }
+                      ].map((report, i) => (
+                        <motion.div
+                          key={i}
+                          initial={{ opacity: 0, x: -20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: i * 0.1 }}
+                          className="bg-white p-6 rounded-3xl border border-slate-200 flex items-center justify-between hover:border-primary/30 hover:shadow-md transition-all group"
+                        >
+                          <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 group-hover:bg-primary/10 group-hover:text-primary transition-colors">
+                              <FileText size={24} />
+                            </div>
+                            <div>
+                              <p className="text-sm font-black text-slate-900">{report.title}</p>
+                              <div className="flex items-center gap-2 mt-0.5">
+                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{report.date}</span>
+                                <span className="w-1 h-1 rounded-full bg-slate-200" />
+                                <span className="text-[10px] font-black text-primary uppercase tracking-widest">{report.tag}</span>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-lg font-black text-slate-900">{report.score}</p>
+                            <button className="text-[10px] font-black text-primary uppercase tracking-widest hover:underline mt-0.5">Download PDF</button>
+                          </div>
+                        </motion.div>
+                      ))}
+                    </div>
+
+                    <div className="mt-auto shrink-0">
+                      <button className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black shadow-lg shadow-slate-900/10 hover:scale-[1.02] flex items-center justify-center gap-2">
+                        <Download size={18} /> Download All Reports
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </motion.div>
           </div>
         )}
