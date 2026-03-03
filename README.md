@@ -1,4 +1,6 @@
 
+WELCOME TO GREENSYNC !!!
+
 ## Run Locally
 
 **Prerequisites:**  Node.js
