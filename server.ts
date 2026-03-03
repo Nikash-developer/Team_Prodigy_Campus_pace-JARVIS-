@@ -20,8 +20,8 @@ import noticeRoutes from './server/routes/noticeRoutes';
 import chatbotRoutes from './server/routes/chatbotRoutes';
 import questionPaperRoutes from './server/routes/questionPaperRoutes';
 
-import dns from "node:dns/promises";
-dns.setServers(["1.1.1.1", "8.8.8.8"]); // Cloudflare + Google DNS
+import dns from "node:dns";
+// dns.setServers(["1.1.1.1", "8.8.8.8"]); // Cloudflare + Google DNS - Disabled for production stability unless needed
 
 dotenv.config();
 
