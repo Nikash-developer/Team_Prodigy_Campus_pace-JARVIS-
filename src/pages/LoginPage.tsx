@@ -131,7 +131,7 @@ export default function LoginPage() {
         const profileData = {
           name: firebaseUser.displayName || 'User',
           email: firebaseUser.email || '',
-          role: 'student',
+          role: role, // Use the selected role (Student or Faculty) from the UI
           department: 'General',
           idNumber: 'SOCIAL-' + firebaseUser.uid.substring(0, 5),
           createdAt: new Date().toISOString(),
@@ -155,7 +155,15 @@ export default function LoginPage() {
 
     } catch (err: any) {
       console.error('Social Login Error:', err);
-      setError('Social login failed. Please try again.');
+      let msg = 'Social login failed. Please try again.';
+      if (err.code === 'auth/operation-not-allowed') {
+        msg = 'This sign-in provider is not enabled in Firebase Console.';
+      } else if (err.code === 'auth/popup-closed-by-user') {
+        msg = 'Login popup was closed before completion.';
+      } else if (err.code === 'auth/unauthorized-domain') {
+        msg = 'This domain is not authorized for Firebase Auth.';
+      }
+      setError(msg);
     } finally {
       setIsLoading(false);
     }
