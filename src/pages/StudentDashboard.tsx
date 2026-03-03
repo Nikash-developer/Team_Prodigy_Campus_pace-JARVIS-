@@ -2325,51 +2325,56 @@ export default function StudentDashboard() {
 
               <div className="rounded-[2rem] overflow-hidden">
                 {/* Desktop View */}
-                <div className="hidden lg:block bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl overflow-hidden shadow-sm">
+                <div className={`hidden lg:block ${t.card} border ${t.border} rounded-[2rem] lg:rounded-[3rem] overflow-hidden shadow-sm`}>
                   <table className="w-full text-left">
                     <thead>
                       <tr className={`${t.search} border-b ${t.border}`}>
-                        <th className={`px-8 py-4 text-xs font-black uppercase tracking-widest ${t.muted}`}>Subject</th>
-                        <th className={`px-8 py-4 text-xs font-black uppercase tracking-widest ${t.muted}`}>Year</th>
-                        <th className={`px-8 py-4 text-xs font-black uppercase tracking-widest ${t.muted}`}>Semester</th>
-                        <th className={`px-8 py-4 text-xs font-black uppercase tracking-widest ${t.muted}`}>Type</th>
-                        <th className={`px-8 py-4 text-xs font-black uppercase tracking-widest ${t.muted} text-right`}>Action</th>
+                        <th className={`px-10 py-6 text-xs font-black uppercase tracking-widest ${t.muted}`}>Subject</th>
+                        <th className={`px-10 py-6 text-xs font-black uppercase tracking-widest ${t.muted}`}>Year</th>
+                        <th className={`px-10 py-6 text-xs font-black uppercase tracking-widest ${t.muted}`}>Semester</th>
+                        <th className={`px-10 py-6 text-xs font-black uppercase tracking-widest ${t.muted}`}>Type</th>
+                        <th className={`px-10 py-6 text-xs font-black uppercase tracking-widest ${t.muted} text-right`}>Action</th>
                       </tr>
                     </thead>
                     <tbody>
                       {filteredPapers.map((paper) => (
                         <motion.tr
                           key={paper.id}
-                          initial={{ opacity: 0, y: 10 }}
+                          initial={{ opacity: 0, y: 15 }}
                           animate={{ opacity: 1, y: 0 }}
-                          className={`border-b ${t.border} last:border-0 hover:${t.search} transition-colors group`}
+                          whileHover={{ scale: 1.002, x: 4 }}
+                          className={`border-b ${t.border} last:border-0 hover:${t.search} transition-all duration-300 group cursor-pointer`}
                         >
-                          <td className="px-8 py-6">
-                            <div className="flex items-center gap-3">
-                              <div className={`p-2 ${t.search} ${t.accent.replace('text-', 'bg-').split(' ')[0]}/10 ${t.accent} rounded-lg`}>
-                                <FileQuestion size={18} />
+                          <td className="px-10 py-7">
+                            <div className="flex items-center gap-4">
+                              <div className={`p-3 ${t.search} rounded-2xl shadow-sm group-hover:bg-primary/10 transition-colors`}>
+                                <GraduationCap size={20} className="text-primary" />
                               </div>
-                              <span className={`font-bold ${t.heading}`}>{paper.subject}</span>
+                              <span className={`text-base font-black ${t.heading} group-hover:text-primary transition-colors`}>{paper.subject}</span>
                             </div>
                           </td>
-                          <td className={`px-8 py-6 text-sm font-bold ${t.muted}`}>{paper.year}</td>
-                          <td className={`px-8 py-6 text-sm font-bold ${t.muted}`}>{paper.semester}</td>
-                          <td className="px-8 py-6">
-                            <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${paper.type === 'Regular' ? 'bg-green-500/10 text-green-500' : 'bg-orange-500/10 text-orange-500'
+                          <td className={`px-10 py-7 text-sm font-black ${t.muted}`}>{paper.year}</td>
+                          <td className={`px-10 py-7 text-sm font-black ${t.muted}`}>{paper.semester}</td>
+                          <td className="px-10 py-7">
+                            <span className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest ${paper.type === 'Regular'
+                              ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'
+                              : 'bg-orange-500/10 text-orange-500 border border-orange-500/20'
                               }`}>
                               {paper.type}
                             </span>
                           </td>
-                          <td className="px-8 py-6 text-right">
-                            <a
+                          <td className="px-10 py-7 text-right">
+                            <motion.a
                               href={paper.url}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className={`p-2 ${t.muted} hover:text-primary transition-colors inline-block`}
-                              title="View/Download Paper"
+                              whileHover={{ scale: 1.1 }}
+                              whileTap={{ scale: 0.9 }}
+                              className={`p-3 ${t.search} ${t.muted} hover:text-primary transition-all inline-flex items-center justify-center rounded-xl shadow-sm`}
+                              title="Open Question Paper"
                             >
-                              <FileDown size={20} />
-                            </a>
+                              <ExternalLink size={20} />
+                            </motion.a>
                           </td>
                         </motion.tr>
                       ))}
@@ -2387,40 +2392,43 @@ export default function StudentDashboard() {
                       className={`${t.card} p-5 rounded-3xl border ${t.border} shadow-sm flex flex-col gap-4 relative overflow-hidden group`}
                     >
                       <div className="flex items-start justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className={`p-2.5 bg-primary/10 text-primary rounded-xl`}>
-                            <FileQuestion size={20} />
+                        <div className="flex items-center gap-4">
+                          <div className={`p-3 ${t.search} text-primary rounded-2xl shadow-sm`}>
+                            <GraduationCap size={22} />
                           </div>
                           <div>
-                            <h3 className={`text-sm font-black ${t.heading} leading-tight mb-1`}>{paper.subject}</h3>
+                            <h3 className={`text-base font-black ${t.heading} leading-tight mb-1.5`}>{paper.subject}</h3>
                             <div className="flex items-center gap-2">
-                              <span className={`text-[10px] font-bold ${t.muted} bg-slate-50 dark:bg-slate-800 px-2 py-0.5 rounded-md`}>{paper.year}</span>
-                              <span className={`text-[10px] font-bold ${t.muted} bg-slate-50 dark:bg-slate-800 px-2 py-0.5 rounded-md`}>{paper.semester}</span>
+                              <span className={`text-[10px] font-black ${t.muted} ${t.search} px-3 py-1 rounded-lg`}>{paper.year}</span>
+                              <span className={`text-[10px] font-black ${t.muted} ${t.search} px-3 py-1 rounded-lg`}>{paper.semester}</span>
                             </div>
                           </div>
                         </div>
-                        <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest ${paper.type === 'Regular' ? 'bg-green-50/50 text-green-600' : 'bg-orange-50/50 text-orange-600'}`}>
+                        <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${paper.type === 'Regular' ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/10' : 'bg-orange-500/10 text-orange-600 border border-orange-500/10'}`}>
                           {paper.type}
                         </span>
                       </div>
-                      <a
+                      <motion.a
                         href={paper.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="w-full flex items-center justify-center gap-2 py-3 bg-primary text-white rounded-2xl font-black text-xs shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all"
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        className="w-full flex items-center justify-center gap-3 py-4 bg-primary text-white rounded-2xl font-black text-sm shadow-xl shadow-primary/25 transition-all"
                       >
-                        <FileDown size={14} /> View Document
-                      </a>
+                        <ExternalLink size={16} /> View Question Paper
+                      </motion.a>
                     </motion.div>
                   ))}
                 </div>
               </div>
               {filteredPapers.length === 0 && (
-                <div className="p-20 text-center">
-                  <div className={`${t.search} w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 ${t.muted} opacity-20`}>
-                    <FileQuestion size={40} />
+                <div className="p-24 text-center">
+                  <div className={`${t.search} w-24 h-24 rounded-[2.5rem] flex items-center justify-center mx-auto mb-6 text-primary/20 shadow-inner`}>
+                    <GraduationCap size={44} />
                   </div>
-                  <p className={`${t.muted} font-bold`}>No question papers found for the selected filters.</p>
+                  <p className={`text-lg font-black ${t.heading}`}>No papers found</p>
+                  <p className={`${t.muted} font-bold mt-2 text-sm`}>Try adjusting your semester or year filters.</p>
                 </div>
               )}
             </motion.div>
