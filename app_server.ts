@@ -1,10 +1,7 @@
 import express from 'express';
-// import { createServer as createViteServer } from 'vite'; // Removed from top for production safety
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import http from 'http';
-import { Server } from 'socket.io';
 import cors from 'cors';
 
 // MongoDB setup
@@ -21,11 +18,7 @@ import chatbotRoutes from './server/routes/chatbotRoutes';
 import questionPaperRoutes from './server/routes/questionPaperRoutes';
 import quizRoutes from './server/routes/quizRoutes';
 
-import dns from "node:dns";
-// dns.setServers(["1.1.1.1", "8.8.8.8"]); // Cloudflare + Google DNS - Disabled for production stability unless needed
-
 dotenv.config();
-
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -51,7 +44,6 @@ const dbMiddleware = async (req: any, res: any, next: any) => {
 };
 
 // --- API ROUTES ---
-// We register these at the top level so they are available immediately for Vercel
 app.use('/api/auth', dbMiddleware, authRoutes);
 app.use('/api/assignments', dbMiddleware, assignmentRoutes);
 app.use('/api/submissions', dbMiddleware, submissionRoutes);
@@ -62,49 +54,63 @@ app.use('/api/quiz', dbMiddleware, quizRoutes);
 app.use('/api', dbMiddleware, questionPaperRoutes);
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
-async function setupApp() {
-  // --- VITE MIDDLEWARE ---
-  if (process.env.NODE_ENV !== "production") {
-    // Dynamically import vite only in development
-    const { createServer: createViteServer } = await import('vite');
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
+// Production serving of static files
+if (process.env.NODE_ENV === "production" || process.env.VERCEL === "1") {
+  const distPath = path.resolve(process.cwd(), 'dist');
+  app.use(express.static(distPath));
 
-    // Seed locally only
-    await connectDB();
-    await seedDB();
-  } else {
-    // Production serving
-    const distPath = path.resolve(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get("*", (req, res) => {
-      // Check if the path is an API call that missed the routes
-      if (req.path.startsWith('/api/')) {
-        return res.status(404).json({ error: 'API route not found' });
-      }
-      res.sendFile(path.join(distPath, "index.html"));
-    });
-  }
+  // Custom API 404 handler
+  app.use('/api/*', (req, res) => {
+    res.status(404).json({ error: 'API route not found' });
+  });
 
-  if (process.env.VERCEL !== "1") {
-    const server = http.createServer(app);
-    const io = new Server(server, { cors: { origin: '*' } });
-    app.set('io', io);
-
-    io.on('connection', (socket) => {
-      console.log('A user connected via Socket.io');
-    });
-
-    server.listen(PORT as number, "0.0.0.0", () => {
-      console.log(`Server running on http://localhost:${PORT}`);
-    });
-  }
+  // SPA fallback
+  app.get("*", (req, res) => {
+    res.sendFile(path.join(distPath, "index.html"));
+  });
 }
 
-setupApp().catch((err) => {
-  console.error("setupApp failed:", err);
-});
+// Standalone Server Setup (Local only)
+if (process.env.VERCEL !== "1") {
+  const startServer = async () => {
+    if (process.env.NODE_ENV !== "production") {
+      // Dynamically import vite only in development
+      try {
+        const { createServer: createViteServer } = await import('vite');
+        const vite = await createViteServer({
+          server: { middlewareMode: true },
+          appType: "spa",
+        });
+        app.use(vite.middlewares);
+
+        await connectDB();
+        await seedDB();
+      } catch (err) {
+        console.warn("Vite failed to load:", err);
+      }
+    }
+
+    // Standard HTTP + Socket.io
+    try {
+      const { createServer } = await import('http');
+      const { Server } = await import('socket.io');
+      const server = createServer(app);
+      const io = new Server(server, { cors: { origin: '*' } });
+      app.set('io', io);
+
+      io.on('connection', (socket) => {
+        console.log('A user connected via Socket.io');
+      });
+
+      server.listen(PORT as number, "0.0.0.0", () => {
+        console.log(`Server running on http://localhost:${PORT}`);
+      });
+    } catch (err) {
+      console.error("Failed to start standalone server:", err);
+    }
+  };
+
+  startServer();
+}
+
 export default app;
