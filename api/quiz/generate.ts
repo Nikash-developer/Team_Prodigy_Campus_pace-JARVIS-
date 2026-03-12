@@ -1,7 +1,6 @@
-// Quiz Generation Handler - v1.1
+// Quiz Generation Handler - v1.2 (Bypass Auth)
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import dotenv from 'dotenv';
-import jwt from 'jsonwebtoken';
 
 dotenv.config();
 
