@@ -30,7 +30,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             // Fallback: Decode without verifying so we don't completely block the user while debugging
             const decoded: any = jwt.decode(token);
             if (!decoded) {
-                return res.status(401).json({ error: 'Invalid token format. Please log out and back in.' });
+                const head = token.length > 20 ? token.substring(0, 10) : token;
+                const tail = token.length > 20 ? token.substring(token.length - 10) : '';
+                return res.status(401).json({ error: `Invalid token format. Received length: ${token.length}, Head: "${head}", Tail: "${tail}"` });
             }
             userId = decoded.id;
         }
