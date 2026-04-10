@@ -231,7 +231,7 @@ export default function FacultyDashboard() {
             <div className={`p-1.5 lg:p-2 ${t.accentBg} rounded-xl lg:rounded-2xl ${t.accent} shadow-sm transform group-hover:rotate-12 transition-transform`}>
               <Leaf size={24} fill="currentColor" className="lg:w-7 lg:h-7" />
             </div>
-            <span className={`text-lg lg:text-2xl font-black tracking-tight ${t.text} italic`}>Green-Sync</span>
+            <span className={`text-lg lg:text-2xl font-black tracking-tight ${t.text} italic`}>Campus pace</span>
           </div>
           <div className="relative flex-1 max-w-md hidden lg:block">
             <Search className={`absolute left-4 top-1/2 -translate-y-1/2 ${t.muted}`} size={18} />
@@ -327,7 +327,7 @@ export default function FacultyDashboard() {
                   <div className={`p-2 ${t.accentBg} rounded-xl ${t.accent}`}>
                     <Leaf size={24} fill="currentColor" />
                   </div>
-                  <span className={`text-xl font-black italic ${t.heading}`}>Green-Sync</span>
+                  <span className={`text-xl font-black italic ${t.heading}`}>Campus pace</span>
                 </div>
                 <button
                   onClick={() => setIsMobileMenuOpen(false)}

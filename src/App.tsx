@@ -8,6 +8,7 @@ import FacultyDashboard from './pages/FacultyDashboard';
 import AdminDashboard from './pages/AdminDashboard';
 import AssignmentManagement from './pages/AssignmentManagement';
 import NoticeAdmin from './pages/NoticeAdmin';
+import DashboardRedirect from './components/DashboardRedirect';
 import { AnimatePresence } from 'motion/react';
 
 function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode, allowedRoles?: string[] }) {
@@ -35,6 +36,7 @@ export default function App() {
           <Routes>
             <Route path="/" element={<LandingPage />} />
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/dashboard" element={<DashboardRedirect />} />
             
             <Route path="/student/*" element={
               <ProtectedRoute allowedRoles={['student']}>

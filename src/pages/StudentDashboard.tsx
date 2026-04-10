@@ -509,7 +509,7 @@ const ReminderModal: React.FC<{ onClose: () => void, onSet: (time: string) => vo
 
 const AIAssistant: React.FC<{ onClose: () => void, theme: any }> = ({ onClose, theme: t }) => {
   const [messages, setMessages] = useState<{ role: 'user' | 'ai', text: string }[]>([
-    { role: 'ai', text: "Hi there! I'm your Green-Sync assistant. I can help you find courses, check your eco-impact, or find question papers. How can I help you today?" }
+    { role: 'ai', text: "Hi there! I'm your Campus pace assistant. I can help you find courses, check your eco-impact, or find question papers. How can I help you today?" }
   ]);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
@@ -562,7 +562,7 @@ const AIAssistant: React.FC<{ onClose: () => void, theme: any }> = ({ onClose, t
               <Sparkles size={20} />
             </div>
             <div>
-              <h3 className="font-black text-sm">Green-Sync AI</h3>
+              <h3 className="font-black text-sm">Campus pace AI</h3>
               <p className="text-[10px] font-bold opacity-80 uppercase tracking-widest">Always Online</p>
             </div>
           </div>
@@ -971,7 +971,7 @@ export default function StudentDashboard() {
   const [showAssistant, setShowAssistant] = useState(false);
   const [isAssistantTyping, setIsAssistantTyping] = useState(false);
   const [assistantMessages, setAssistantMessages] = useState([
-    { role: 'assistant', text: "Hello! I'm your Green-Sync AI assistant. How can I help you save paper and master your courses today?" }
+    { role: 'assistant', text: "Hello! I'm your Campus pace AI assistant. How can I help you save paper and master your courses today?" }
   ]);
   const [assistantInput, setAssistantInput] = useState('');
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -1001,7 +1001,7 @@ export default function StudentDashboard() {
       } else if (lower.includes('notic')) {
         response = "Check the notifications bell in the header! You can mark them all as read once you've seen them.";
       } else {
-        response = "That's a great question! I'm constantly learning from Green-Sync data. Is there anything specific about your assignments or Mumbai papers I can help with?";
+        response = "That's a great question! I'm constantly learning from Campus pace data. Is there anything specific about your assignments or Mumbai papers I can help with?";
       }
 
       setAssistantMessages(prev => [...prev, { role: 'assistant', text: response }]);
@@ -1031,7 +1031,7 @@ export default function StudentDashboard() {
 
   const [studentProfile, setStudentProfile] = useState({
     name: user?.name || 'Nikash Developer',
-    email: user?.email || 'student@greensync.edu',
+    email: user?.email || 'student@campuspace.edu',
     phone: '+91 98765 43210',
     dept: 'Computer Engineering',
     year: 'TE-Sem 6',
@@ -1230,7 +1230,7 @@ export default function StudentDashboard() {
       {
         id: 5,
         title: 'Hackathon Registration Open!',
-        content: 'Green-Sync Dev Hack is now accepting registrations. Build sustainable solutions and win eco-friendly prizes.',
+        content: 'Campus pace Dev Hack is now accepting registrations. Build sustainable solutions and win eco-friendly prizes.',
         publish_date: new Date(Date.now() - 240 * 60000).toISOString(),
         is_emergency: false,
         target_department: 'CS',
@@ -1603,7 +1603,7 @@ export default function StudentDashboard() {
             <div className="bg-primary p-2 rounded-lg lg:p-2.5 lg:rounded-2xl shadow-lg transform group-hover:rotate-12 transition-transform">
               <Leaf size={20} className="text-white lg:w-7 lg:h-7" />
             </div>
-            <span className={`text-lg lg:text-2xl font-black tracking-tight ${t.heading} italic transition-colors`}>Green-Sync</span>
+            <span className={`text-lg lg:text-2xl font-black tracking-tight ${t.heading} italic transition-colors`}>Campus pace</span>
           </div>
 
           <div className="relative w-64 xl:w-80 hidden lg:block">
@@ -1734,7 +1734,7 @@ export default function StudentDashboard() {
                   <div className="bg-primary p-2.5 rounded-2xl shadow-lg shadow-primary/20">
                     <Leaf size={24} className="text-white" />
                   </div>
-                  <span className={`text-2xl font-black italic tracking-tight ${t.heading}`}>Green-Sync</span>
+                  <span className={`text-2xl font-black italic tracking-tight ${t.heading}`}>Campus pace</span>
                 </div>
                 <button
                   onClick={() => setIsMobileMenuOpen(false)}
@@ -4199,7 +4199,7 @@ export default function StudentDashboard() {
                   <Bot className="text-primary" size={24} />
                 </div>
                 <div>
-                  <h3 className={`text-xl font-black ${t.heading}`}>Green-Sync AI</h3>
+                  <h3 className={`text-xl font-black ${t.heading}`}>Campus pace AI</h3>
                   <div className="flex items-center gap-2">
                     <span className="w-2 h-2 bg-primary rounded-full animate-pulse" />
                     <span className={`text-[10px] font-bold ${t.muted} uppercase tracking-widest leading-none`}>AI ONLINE</span>
@@ -4262,7 +4262,7 @@ export default function StudentDashboard() {
                 </button>
               </form>
               <p className={`text-[9px] text-center ${t.muted} mt-4 font-black uppercase tracking-widest`}>
-                Powered by Green-Sync Knowledge Hub
+                Powered by Campus pace Knowledge Hub
               </p>
             </div>
           </motion.div>

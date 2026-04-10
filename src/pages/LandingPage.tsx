@@ -79,7 +79,7 @@ export default function LandingPage() {
           <div className="p-2.5 bg-[#E8F5E9] rounded-2xl text-[#4CAF50] shadow-sm transform group-hover:rotate-12 transition-transform">
             <Leaf size={28} fill="currentColor" />
           </div>
-          <span className="text-2xl font-black tracking-tight bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text text-transparent italic">Green-Sync</span>
+          <span className="text-2xl font-black tracking-tight bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text text-transparent italic">Campus pace</span>
         </div>
 
         {/* Desktop Menu */}
@@ -126,7 +126,7 @@ export default function LandingPage() {
                 <div className="p-2 bg-[#E8F5E9] rounded-xl text-[#4CAF50]">
                   <Leaf size={24} fill="currentColor" />
                 </div>
-                <span className="text-xl font-black italic">Green-Sync</span>
+                <span className="text-xl font-black italic">Campus pace</span>
               </div>
               <div className="flex flex-col gap-6">
                 <button onClick={() => { setIsMenuOpen(false); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="text-left text-lg font-bold text-slate-700 flex items-center gap-3"><ArrowRight size={18} className="text-[#81C784]" /> Home</button>
@@ -264,7 +264,7 @@ export default function LandingPage() {
             <span className="text-xs font-bold text-[#81C784] uppercase tracking-widest mb-4 block">The Challenge</span>
             <h2 className="text-3xl lg:text-4xl font-bold text-slate-900 mb-6">Old School vs. Green School</h2>
             <p className="text-slate-500 max-w-2xl mx-auto text-lg">
-              Traditional campuses are drowning in paper. Green-Sync provides a modern bridge to environmental responsibility.
+              Traditional campuses are drowning in paper. Campus pace provides a modern bridge to environmental responsibility.
             </p>
           </div>
 
@@ -299,7 +299,7 @@ export default function LandingPage() {
               <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center mb-8 backdrop-blur-sm relative z-10">
                 <Users className="text-white w-6 h-6" />
               </div>
-              <h3 className="text-xl sm:text-2xl font-bold mb-4 relative z-10">The Green-Sync Solution</h3>
+              <h3 className="text-xl sm:text-2xl font-bold mb-4 relative z-10">The Campus pace Solution</h3>
               <p className="text-white/90 text-sm sm:text-base leading-relaxed mb-8 relative z-10">
                 Instant digital submissions, cloud backups, and real-time impact tracking. Secure, eco-friendly, and always accessible.
               </p>
@@ -452,7 +452,7 @@ export default function LandingPage() {
                 <div className="p-2 bg-[#E8F5E9] rounded-xl text-[#4CAF50] group-hover:rotate-12 transition-transform">
                   <Leaf size={24} fill="currentColor" />
                 </div>
-                <span className="text-xl font-black tracking-tight italic">Green-Sync</span>
+                <span className="text-xl font-black tracking-tight italic">Campus pace</span>
               </div>
               <p className="text-sm text-slate-500 leading-relaxed mb-6 max-w-xs">
                 Empowering education with sustainable technology. Building a greener future, one assignment at a time.
@@ -504,7 +504,7 @@ export default function LandingPage() {
           </div>
 
           <div className="pt-8 border-t border-slate-100 flex flex-col md:flex-row justify-between items-center gap-4">
-            <p className="text-xs text-slate-400">© 2024 Green-Sync Inc. All rights reserved.</p>
+            <p className="text-xs text-slate-400">© 2024 Campus pace Inc. All rights reserved.</p>
             <div className="flex gap-6 text-xs text-slate-400">
               <a href="#" className="hover:text-slate-600 transition-colors">Privacy Policy</a>
               <a href="#" className="hover:text-slate-600 transition-colors">Terms of Service</a>

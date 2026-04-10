@@ -1,8 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User } from './types';
-import { auth, db } from './lib/firebase';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { supabase } from './lib/supabase';
 
 interface AuthContextType {
   user: User | null;
@@ -18,18 +16,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Listen for Firebase Auth changes
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+    // Listen for Supabase Auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       setIsLoading(true);
-      if (firebaseUser) {
-        // Fetch additional user data from Firestore
+      if (session?.user) {
+        // Fetch additional user data from Supabase DB
         try {
-          const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
-          if (userDoc.exists()) {
-            const userData = userDoc.data();
+          const { data: userData, error } = await supabase
+            .from('users')
+            .select('*')
+            .eq('id', session.user.id)
+            .single();
+
+          if (userData && !error) {
             setUser({
-              id: firebaseUser.uid,
-              email: firebaseUser.email || '',
+              id: session.user.id,
+              email: session.user.email || '',
               name: userData.name || 'User',
               role: userData.role || 'student',
               department: userData.department || '',
@@ -38,9 +40,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           } else {
             // If doc doesn't exist yet, we still set basic user info
             setUser({
-              id: firebaseUser.uid,
-              email: firebaseUser.email || '',
-              name: firebaseUser.displayName || 'New User',
+              id: session.user.id,
+              email: session.user.email || '',
+              name: session.user.user_metadata?.full_name || 'New User',
               role: 'student',
               department: ''
             } as User);
@@ -55,7 +57,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setIsLoading(false);
     });
 
-    return () => unsubscribe();
+    return () => subscription.unsubscribe();
   }, []);
 
   const login = (userData: User) => {
@@ -65,7 +67,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = async () => {
     try {
-      await signOut(auth);
+      await supabase.auth.signOut();
       setUser(null);
       localStorage.removeItem('gs_user');
       localStorage.removeItem('token');

@@ -25,7 +25,7 @@ export default function AdminDashboard() {
       <aside className="w-64 bg-white border-r border-slate-100 flex flex-col fixed h-full z-20">
         <div className="p-8 flex items-center gap-2 text-slate-900">
           <Leaf className="text-primary w-8 h-8" />
-          <span className="text-xl font-bold">Green-Sync</span>
+          <span className="text-xl font-bold">Campus pace</span>
         </div>
 
         <nav className="flex-1 px-4 space-y-2">
