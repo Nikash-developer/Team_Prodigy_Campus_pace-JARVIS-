@@ -11,6 +11,7 @@ const userSchema = new mongoose.Schema({
         total_pages_saved: { type: Number, default: 0 },
         total_water_saved: { type: Number, default: 0 },
         total_co2_prevented: { type: Number, default: 0 },
+        total_trees_preserved: { type: Number, default: 0 },
     },
     eco_level: { type: Number, default: 1 }
 }, { timestamps: true });

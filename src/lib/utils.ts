@@ -10,15 +10,18 @@ export function formatNumber(num: number) {
 }
 
 export const FORMULA = {
-  PAGES_PER_ASSIGNMENT: 10,
-  PAGES_PER_TREE: 8000,
-  CO2_PER_PAGE: 0.005, // kg
+  WATER_PER_SHEET: 10,        // liters
+  CO2_PER_SHEET: 4.64,        // grams
+  SHEETS_PER_TREE: 8333,      // sheets
+  WEIGHT_PER_SHEET: 4.9       // grams
 };
 
 export function calculateImpact(pages: number) {
   return {
-    trees: (pages / FORMULA.PAGES_PER_TREE).toFixed(2),
-    co2: (pages * FORMULA.CO2_PER_PAGE).toFixed(2),
-    pages: formatNumber(pages)
+    pagesSaved: pages,
+    waterSaved: parseFloat((pages * FORMULA.WATER_PER_SHEET).toFixed(2)),
+    co2Saved: parseFloat((pages * FORMULA.CO2_PER_SHEET).toFixed(2)),
+    treesSaved: parseFloat((pages / FORMULA.SHEETS_PER_TREE).toFixed(5)),
+    formattedPages: formatNumber(pages)
   };
 }

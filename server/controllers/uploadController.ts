@@ -56,7 +56,8 @@ export const uploadFile = async (req: any, res: any) => {
             $inc: {
                 'eco_stats.total_pages_saved': eco_update.pages,
                 'eco_stats.total_water_saved': eco_update.water_saved,
-                'eco_stats.total_co2_prevented': eco_update.co2_prevented
+                'eco_stats.total_co2_prevented': eco_update.co2_prevented,
+                'eco_stats.total_trees_preserved': eco_update.trees_preserved
             }
         });
 

@@ -22,7 +22,7 @@ import { Notice, Assignment } from '../types';
 import { AssignmentSubmissionView } from '../components/AssignmentSubmissionView';
 import { allQuestionPapers } from '../lib/mockPapers';
 
-type Tab = 'dashboard' | 'courses' | 'eco-tracker' | 'settings' | 'papers' | 'notes' | 'assignment-submission';
+type Tab = 'dashboard' | 'courses' | 'eco-tracker' | 'settings' | 'papers' | 'notes' | 'assignment-submission' | 'attendance';
 
 interface Note {
   id: number;
@@ -127,21 +127,27 @@ const themes = {
 // Sub-components
 const StatCard: React.FC<{ icon: React.ReactNode, label: string, value: string | number, trend: string, color: string, isNumeric?: boolean, theme: any }> = ({ icon, label, value, trend, color, isNumeric, theme: t }) => (
   <motion.div
-    whileHover={{ y: -5 }}
-    className={`${t.card} p-5 lg:p-8 rounded-2xl lg:rounded-[2rem] shadow-sm border ${t.border} flex flex-col justify-between group transition-all duration-500 hover:shadow-xl hover:shadow-slate-200/50`}
+    whileHover={{ 
+      y: -12, 
+      scale: 1.02,
+      transition: { type: "spring", stiffness: 300, damping: 15 }
+    }}
+    className={`${t.card} p-5 lg:p-8 rounded-2xl lg:rounded-[2.5rem] shadow-sm border ${t.border} flex flex-col justify-between group transition-all duration-500 hover:shadow-2xl hover:shadow-primary/10 relative overflow-hidden`}
   >
-    <div className="flex justify-between items-start mb-6">
-      <div className={`${t.accentBg} ${t.accent} p-3 rounded-2xl group-hover:scale-110 transition-transform`}>
+    <div className="absolute top-0 right-0 w-24 h-24 bg-primary/5 rounded-full -translate-y-12 translate-x-12 blur-2xl group-hover:bg-primary/10 transition-colors" />
+    <div className="flex justify-between items-start mb-6 relative z-10">
+      <div className={`${t.accentBg} ${t.accent} p-4 rounded-[1.25rem] group-hover:rotate-6 transition-transform shadow-sm`}>
         {icon}
       </div>
-      <div className={`flex items-center gap-1 ${trend.startsWith('+') ? 'text-green-500' : 'text-slate-400'} text-xs font-black`}>
+      <div className={`flex items-center gap-1.5 ${trend.startsWith('+') ? 'text-green-500' : 'text-slate-400'} text-[10px] font-black uppercase tracking-wider`}>
+        <ArrowUpRight size={12} className={trend.startsWith('+') ? 'rotate-0' : 'rotate-90'} />
         {trend}
       </div>
     </div>
-    <div>
-      <p className={`text-[10px] lg:text-xs font-black ${t.muted} uppercase tracking-widest mb-1`}>{label}</p>
+    <div className="relative z-10">
+      <p className={`text-[10px] lg:text-xs font-black ${t.muted} uppercase tracking-[0.2em] mb-2`}>{label}</p>
       <div className={`text-2xl lg:text-4xl font-black ${t.heading} tracking-tight`}>
-        {isNumeric ? <CountUp end={Number(value)} duration={2} /> : value}
+        {isNumeric ? <CountUp end={Number(value.toString().replace(/[^0-9.]/g, ''))} duration={2} decimals={value.toString().includes('.') ? 2 : 0} /> : value}
       </div>
     </div>
   </motion.div>
@@ -873,6 +879,9 @@ const SettingsOption: React.FC<{
 export default function StudentDashboard() {
   const { user, logout } = useAuth();
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
+  const [attendanceSummary, setAttendanceSummary] = useState<any>(null);
+  const [isAttendanceLoading, setIsAttendanceLoading] = useState(false);
+  const [simulatedMisses, setSimulatedMisses] = useState<Record<string, number>>({});
   const [notices, setNotices] = useState<Notice[]>([]);
   const [impact, setImpact] = useState({ total_pages: 1240 });
   const [showAllNotices, setShowAllNotices] = useState(false);
@@ -1163,6 +1172,23 @@ export default function StudentDashboard() {
     }
   }, [themeMode]);
 
+  useEffect(() => {
+    const fetchAttendance = async () => {
+      if (!user?.id) return;
+      setIsAttendanceLoading(true);
+      try {
+        const response = await fetch(`/api/attendance/student/summary/${user.id}`);
+        const data = await response.json();
+        setAttendanceSummary(data);
+      } catch (err) {
+        console.error("Failed to fetch attendance summary:", err);
+      } finally {
+        setIsAttendanceLoading(false);
+      }
+    };
+    fetchAttendance();
+  }, [user?.id]);
+
   const t = themes[themeMode];
 
   useEffect(() => {
@@ -1381,43 +1407,74 @@ export default function StudentDashboard() {
     fetchPapers();
   }, []);
 
-  const handleAssignmentAction = (id: number, action: 'submit' | 'start') => {
-    setAssignments(prev => prev.map(a => {
-      if (a.id === id) {
-        if (action === 'start') {
+  const handleAssignmentAction = async (id: number, action: 'submit' | 'start') => {
+    if (action === 'start') {
+      setAssignments(prev => prev.map(a => {
+        if (a.id === id) {
           setActiveAssignmentId(id);
           const deadlineDate = new Date(a.deadline).getTime();
           const now = Date.now();
           const diffInSeconds = Math.max(0, Math.floor((deadlineDate - now) / 1000));
           setTimeLeft(diffInSeconds);
+          return { ...a, status: 'in-progress' };
         }
-        if (action === 'submit' && a.id === 1 && !a.uploadedFile) {
-          alert('Please upload a PDF file before submitting.');
-          return a;
-        }
-        return { ...a, status: action === 'submit' ? 'submitted' : 'in-progress' };
-      }
-      return a;
-    }));
+        return a;
+      }));
+      return;
+    }
 
     if (action === 'submit') {
       const assignment = assignments.find(a => a.id === id);
-      if (id === 1 && !assignment?.uploadedFile) return;
+      if (!assignment?.uploadedFile) {
+        alert('Please upload a PDF file before submitting.');
+        return;
+      }
 
-      setSubmissionCount(prev => prev + 1);
+      try {
+        const formData = new FormData();
+        formData.append('file', assignment.uploadedFile);
+        formData.append('assignmentId', id.toString());
 
-      // Eco Confetti
-      confetti({
-        particleCount: 80,
-        spread: 70,
-        origin: { y: 0.6 },
-        colors: ['#22C55E', '#16A34A', '#86EFAC', '#4ADE80'],
-        shapes: ['circle', 'square']
-      });
+        const rawToken = localStorage.getItem('token');
+        const authHeader = rawToken && rawToken !== 'undefined' && rawToken !== 'null'
+          ? `Bearer ${rawToken}`
+          : '';
 
-      // alert(`Successfully submitted the assignment!`);
-    } else {
-      // alert(`Successfully started the assignment!`);
+        const res = await fetch('/api/upload', {
+          method: 'POST',
+          headers: authHeader ? { 'Authorization': authHeader } : {},
+          body: formData
+        });
+
+        if (res.ok) {
+          const result = await res.json();
+          
+          setAssignments(prev => prev.map(a => 
+            a.id === id ? { ...a, status: 'submitted' } : a
+          ));
+
+          setSubmissionCount(prev => prev + 1);
+
+          // Eco Confetti
+          confetti({
+            particleCount: 100,
+            spread: 80,
+            origin: { y: 0.6 },
+            colors: ['#22C55E', '#16A34A', '#86EFAC', '#4ADE80'],
+            shapes: ['circle', 'square']
+          });
+
+          // Tip: In a real app, we'd trigger a profile refresh here to show updated eco_stats
+          // For now, we'll suggest the user that their impact has been recorded
+          console.log("Assignment uploaded and eco-impact recorded:", result.eco_impact);
+        } else {
+          const errorData = await res.json();
+          alert(`Submission failed: ${errorData.error || 'Server error'}`);
+        }
+      } catch (error: any) {
+        console.error("Submission error:", error);
+        alert(`Error submitting assignment: ${error.message}`);
+      }
     }
   };
 
@@ -1619,7 +1676,7 @@ export default function StudentDashboard() {
         </div>
 
         <nav className="hidden lg:flex items-center gap-6 xl:gap-8">
-          {['dashboard', 'courses', 'papers', 'notes', 'assignment-submission', 'eco-tracker', 'settings'].map((tab) => {
+          {['dashboard', 'courses', 'papers', 'notes', 'assignment-submission', 'eco-tracker', 'attendance', 'settings'].map((tab) => {
             const labels: Record<string, string> = {
               'dashboard': 'Dashboard',
               'courses': 'Courses',
@@ -1627,6 +1684,7 @@ export default function StudentDashboard() {
               'notes': 'Notes',
               'assignment-submission': 'Assignments',
               'eco-tracker': 'Eco Tracker',
+              'attendance': 'Attendance',
               'settings': 'Settings'
             };
             return (
@@ -1794,6 +1852,188 @@ export default function StudentDashboard() {
 
       <main className="max-w-7xl mx-auto p-4 lg:p-8">
         <AnimatePresence mode="wait">
+          {activeTab === 'attendance' && (
+            <motion.div
+              key="attendance"
+              initial={{ opacity: 0, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.98 }}
+              className="space-y-8 pb-32"
+            >
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                <div>
+                  <h1 className={`text-4xl font-black ${t.heading}`}>Attendance Tracker</h1>
+                  <p className={`${t.muted} font-medium mt-1`}>Real-time tracking and predictive risk analysis.</p>
+                </div>
+                <div className="flex items-center gap-4">
+                  <div className={`px-6 py-4 ${t.card} rounded-[1.5rem] border ${t.border} shadow-sm flex items-center gap-4`}>
+                    <div className="w-10 h-10 rounded-full bg-emerald-500/10 text-emerald-500 flex items-center justify-center">
+                      <Clock size={20} />
+                    </div>
+                    <div>
+                      <p className={`text-[10px] font-black ${t.muted} uppercase`}>Overall Presence</p>
+                      <p className={`text-xl font-black ${t.heading}`}>{attendanceSummary?.overall_percentage?.toFixed(1) || 0}%</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                {/* Summary Card */}
+                <div className="lg:col-span-4 space-y-8">
+                  <div className={`${t.card} p-10 rounded-[2.5rem] border ${t.border} shadow-sm relative overflow-hidden flex flex-col items-center text-center`}>
+                    <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-emerald-500 to-teal-500" />
+                    <h3 className={`text-lg font-black ${t.heading} mb-10`}>Academic Standing</h3>
+                    
+                    <div className="relative w-48 h-48 mb-8">
+                      <svg className="w-full h-full transform -rotate-90">
+                        <circle
+                          cx="96" cy="96" r="88"
+                          fill="none" stroke="currentColor" strokeWidth="12"
+                          className="text-slate-100"
+                        />
+                        <motion.circle
+                          cx="96" cy="96" r="88"
+                          fill="none" stroke="currentColor" strokeWidth="12"
+                          strokeDasharray={552.92}
+                          initial={{ strokeDashoffset: 552.92 }}
+                          animate={{ strokeDashoffset: 552.92 - (552.92 * (attendanceSummary?.overall_percentage || 0)) / 100 }}
+                          className="text-emerald-500"
+                          strokeLinecap="round"
+                        />
+                      </svg>
+                      <div className="absolute inset-0 flex flex-col items-center justify-center">
+                        <span className={`text-4xl font-black ${t.heading}`}>{Math.round(attendanceSummary?.overall_percentage || 0)}%</span>
+                        <span className={`text-[10px] font-black ${t.muted} uppercase tracking-widest`}>Current</span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4 w-full">
+                      <div className={`p-4 rounded-2xl ${attendanceSummary?.overall_percentage >= 75 ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'} text-xs font-bold leading-relaxed`}>
+                        {attendanceSummary?.overall_percentage >= 75 
+                          ? "You are currently above the 75% threshold. Maintain this to stay safe." 
+                          : "Urgent: Your attendance is below the mandatory 75% threshold."}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Simulator Card - Task 3.3 */}
+                  <div className={`${t.card} p-8 rounded-[2.5rem] border ${t.border} shadow-sm group`}>
+                    <div className="flex items-center gap-3 mb-6">
+                      <Sparkles className="text-emerald-500" size={20} />
+                      <h3 className={`text-lg font-black ${t.heading}`}>What-If Simulator</h3>
+                    </div>
+                    <p className={`text-xs font-medium ${t.muted} mb-8`}>Predict your attendance if you miss future lectures.</p>
+                    
+                    <div className="space-y-8">
+                      {attendanceSummary?.subjects?.map((sub: any) => (
+                        <div key={sub.id} className="space-y-4">
+                          <div className="flex justify-between items-center">
+                            <span className={`text-xs font-black ${t.heading}`}>{sub.name}</span>
+                            <span className={`text-xs font-bold ${simulatedMisses[sub.id] ? 'text-red-500' : t.muted}`}>
+                              -{simulatedMisses[sub.id] || 0} lectures
+                            </span>
+                          </div>
+                          <input 
+                            type="range" min="0" max="10" step="1"
+                            value={simulatedMisses[sub.id] || 0}
+                            onChange={(e) => setSimulatedMisses(prev => ({ ...prev, [sub.id]: parseInt(e.target.value) }))}
+                            className="w-full accent-emerald-500 h-1.5 bg-slate-100 rounded-full appearance-none cursor-pointer"
+                          />
+                          <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest">
+                            <span className={t.muted}>Predicted</span>
+                            <span className={`${(sub.percentage - (simulatedMisses[sub.id] || 0) * 2) < 75 ? 'text-red-500' : 'text-emerald-500'} group-hover:scale-110 transition-transform`}>
+                              {Math.max(0, sub.percentage - (simulatedMisses[sub.id] || 0) * 2).toFixed(1)}%
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Subject List */}
+                <div className="lg:col-span-8 space-y-8">
+                  <div className={`${t.card} rounded-[2.5rem] border ${t.border} shadow-sm overflow-hidden`}>
+                    <div className="p-8 border-b border-slate-50 flex items-center justify-between">
+                      <h3 className={`text-xl font-black ${t.heading}`}>Course Breakdown</h3>
+                      <RefreshCcw size={18} className={`${t.muted} hover:rotate-180 transition-all cursor-pointer`} />
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left">
+                        <thead>
+                          <tr className={`bg-slate-50/50 text-[10px] font-black ${t.muted} uppercase tracking-[0.2em]`}>
+                            <th className="px-8 py-5">Subject</th>
+                            <th className="px-8 py-5">Lectures</th>
+                            <th className="px-8 py-5">Percentage</th>
+                            <th className="px-8 py-5">Risk Level</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-50">
+                          {attendanceSummary?.subjects?.map((sub: any) => (
+                            <tr key={sub.id} className="hover:bg-slate-50/30 transition-colors group">
+                              <td className="px-8 py-6">
+                                <p className={`text-sm font-black ${t.heading}`}>{sub.name}</p>
+                                <p className={`text-[10px] font-bold ${t.muted}`}>Theory + Tutorial</p>
+                              </td>
+                              <td className="px-8 py-6">
+                                <div className="flex items-center gap-2">
+                                  <span className={`text-sm font-black ${t.heading}`}>{sub.lectures_attended}</span>
+                                  <span className={`text-xs font-bold ${t.muted}`}>/ {sub.total_conducted}</span>
+                                </div>
+                              </td>
+                              <td className="px-8 py-6">
+                                <span className={`text-sm font-black ${sub.percentage < 75 ? 'text-red-500' : 'text-emerald-500'}`}>
+                                  {sub.percentage.toFixed(1)}%
+                                </span>
+                              </td>
+                              <td className="px-8 py-6">
+                                <div className="flex items-center gap-3">
+                                  <span className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest ${
+                                    sub.percentage < 75 ? 'bg-red-50 text-red-500' : 'bg-emerald-50 text-emerald-500'
+                                  }`}>
+                                    {sub.risk}
+                                  </span>
+                                  {sub.percentage < 75 && (
+                                    <div className="group/tip relative">
+                                      <AlertCircle size={16} className="text-red-400" />
+                                      <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-48 p-3 bg-slate-900 text-white text-[10px] rounded-xl opacity-0 group-hover/tip:opacity-100 transition-opacity pointer-events-none z-50">
+                                        Need {sub.lectures_needed} more lectures to reach 75%
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Notification Alerts - Task 3.4 */}
+                  {attendanceSummary?.subjects?.some((s: any) => s.percentage < 75) && (
+                    <motion.div 
+                      initial={{ x: 20, opacity: 0 }}
+                      animate={{ x: 0, opacity: 1 }}
+                      className="bg-red-50 border border-red-100 p-8 rounded-[2rem] flex items-start gap-6"
+                    >
+                      <div className="p-4 bg-red-500 text-white rounded-2xl shadow-lg shadow-red-500/20">
+                        <ShieldAlert size={24} />
+                      </div>
+                      <div>
+                        <h4 className="text-red-600 font-extrabold text-lg">Critical Attendance Alert</h4>
+                        <p className="text-red-500/80 text-sm font-medium mt-1 leading-relaxed">
+                          Your attendance in <span className="font-black underline">3 subjects</span> has fallen below the mandatory 75%. This may lead to debarment from final examinations. Please contact your HOD immediately.
+                        </p>
+                      </div>
+                    </motion.div>
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          )}
+
           {activeTab === 'dashboard' && (
             <motion.div
               key="dashboard"
@@ -2024,8 +2264,12 @@ export default function StudentDashboard() {
               <h1 className={`text-3xl font-black ${t.heading}`}>Eco-Impact Analysis</h1>
 
               {/* Weekly Goal Area */}
-              <div className={`${t.card} p-8 rounded-[3rem] shadow-sm border ${t.border} flex flex-col md:flex-row items-center gap-12 relative overflow-hidden group transition-all duration-500`}>
-                <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full -translate-y-1/2 translate-x-1/2 -z-10 blur-3xl group-hover:bg-primary/10 transition-colors" />
+              <motion.div 
+                whileHover={{ scale: 1.01, translateY: -4 }}
+                className={`${t.card} p-8 rounded-[3rem] shadow-sm border ${t.border} flex flex-col md:flex-row items-center gap-12 relative overflow-hidden group transition-all duration-500 hover:shadow-2xl hover:shadow-primary/5`}
+              >
+                <div className="absolute top-0 right-0 w-64 h-64 bg-primary/10 rounded-full -translate-y-1/2 translate-x-1/2 -z-10 blur-3xl group-hover:bg-primary/20 transition-colors duration-700" />
+                <div className="absolute bottom-0 left-0 w-48 h-48 bg-blue-500/5 rounded-full translate-y-1/2 -translate-x-1/2 -z-10 blur-2xl group-hover:bg-blue-500/10 transition-colors duration-700" />
 
                 <div className="relative w-48 h-48 flex-shrink-0">
                   <svg className="w-full h-full -rotate-90">
@@ -2034,31 +2278,31 @@ export default function StudentDashboard() {
                       cx="96" cy="96" r="88" fill="none" stroke="currentColor" strokeWidth="16"
                       strokeDasharray="552.92"
                       initial={{ strokeDashoffset: 552.92 }}
-                      animate={{ strokeDashoffset: 552.92 - (552.92 * 0.72) }}
+                      animate={{ strokeDashoffset: 552.92 - (552.92 * (Math.min((user?.eco_stats?.total_pages_saved || 0) / 1000, 1))) }}
                       transition={{ duration: 1.5, ease: "easeOut" }}
                       className="text-primary"
                       strokeLinecap="round"
                     />
                   </svg>
                   <div className="absolute inset-0 flex flex-col items-center justify-center">
-                    <span className={`text-4xl font-black ${t.heading} leading-none`}>72%</span>
+                    <span className={`text-4xl font-black ${t.heading} leading-none`}>{Math.round(((user?.eco_stats?.total_pages_saved || 0) / 1000) * 100)}%</span>
                     <span className={`text-[10px] font-black ${t.muted} uppercase tracking-widest mt-1`}>Goal Progress</span>
                   </div>
                 </div>
 
                 <div className="flex-1 space-y-6">
                   <div>
-                    <h2 className={`text-2xl font-black ${t.heading} mb-2`}>Excellent Progress, {studentProfile.name.split(' ')[0]}!</h2>
-                    <p className={`${t.muted} font-medium max-w-lg`}>You've saved 4kg of CO2 this month. That's equivalent to planting 12 new saplings in our virtual forest.</p>
+                    <h2 className={`text-2xl font-black ${t.heading} mb-2`}>Excellent Progress, {user?.name?.split(' ')[0] || 'Student'}!</h2>
+                    <p className={`${t.muted} font-medium max-w-lg`}>You've saved {((user?.eco_stats?.total_co2_prevented || 0) / 1000).toFixed(2)}kg of CO2. That's equivalent to planting {Math.floor((user?.eco_stats?.total_trees_preserved || 0) * 100)} virtual tree saplings in campus.</p>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className={`p-4 ${t.search} rounded-2xl border ${t.border}`}>
-                      <p className={`text-[10px] font-black ${t.muted} uppercase tracking-widest mb-1`}>Projected Saving</p>
-                      <p className={`text-xl font-bold ${t.heading}`}>12.5 kg/yr</p>
+                      <p className={`text-[10px] font-black ${t.muted} uppercase tracking-widest mb-1`}>Water Conservation</p>
+                      <p className={`text-xl font-bold ${t.heading}`}>{user?.eco_stats?.total_water_saved.toLocaleString() || 0} Liters</p>
                     </div>
                     <div className={`p-4 ${t.search} rounded-2xl border ${t.border}`}>
-                      <p className={`text-[10px] font-black ${t.muted} uppercase tracking-widest mb-1`}>Paper Equivalent</p>
-                      <p className={`text-xl font-bold ${t.heading}`}>2.4 Reams</p>
+                      <p className={`text-[10px] font-black ${t.muted} uppercase tracking-widest mb-1`}>Paper Saved</p>
+                      <p className={`text-xl font-bold ${t.heading}`}>{Math.floor((user?.eco_stats?.total_pages_saved || 0) / 500).toFixed(1)} Reams</p>
                     </div>
                   </div>
                 </div>
@@ -2068,7 +2312,8 @@ export default function StudentDashboard() {
                 <StatCard
                   icon={<FileText />}
                   label="Pages Saved"
-                  value="1,240"
+                  value={user?.eco_stats?.total_pages_saved || 0}
+                  isNumeric={true}
                   trend="+12% this week"
                   color="green"
                   theme={t}
@@ -2076,7 +2321,8 @@ export default function StudentDashboard() {
                 <StatCard
                   icon={<TreePine />}
                   label="Trees Saved"
-                  value="0.5"
+                  value={user?.eco_stats?.total_trees_preserved || 0}
+                  isNumeric={true}
                   trend="+5% this week"
                   color="green"
                   theme={t}
@@ -2084,7 +2330,8 @@ export default function StudentDashboard() {
                 <StatCard
                   icon={<CloudOff />}
                   label="Carbon Offset"
-                  value="4.2 kg"
+                  value={`${((user?.eco_stats?.total_co2_prevented || 0) / 1000).toFixed(2)}`}
+                  isNumeric={true}
                   trend="+8% this week"
                   color="green"
                   theme={t}
@@ -2146,7 +2393,10 @@ export default function StudentDashboard() {
 
                 <div className="space-y-8">
                   {/* Detailed Analysis Card */}
-                  <div className={`${t.card} p-8 rounded-[2rem] shadow-sm border ${t.border}`}>
+                  <motion.div 
+                    whileHover={{ y: -8, scale: 1.02 }}
+                    className={`${t.card} p-8 rounded-[2rem] shadow-sm border ${t.border} hover:shadow-2xl transition-all duration-500`}
+                  >
                     <h3 className={`text-lg font-black ${t.heading} mb-6`}>Impact Composition</h3>
                     <div className="space-y-6">
                       <div className="space-y-3">
@@ -2154,22 +2404,22 @@ export default function StudentDashboard() {
                           <span className={`text-xs font-bold ${t.muted} flex items-center gap-2`}>
                             <div className="w-2 h-2 rounded-full bg-primary" /> Assignments
                           </span>
-                          <span className={`text-sm font-black ${t.heading}`}>820 pgs</span>
+                          <span className={`text-sm font-black ${t.heading}`}>{Math.round((user?.eco_stats?.total_pages_saved || 0) * 0.75)} pgs</span>
                         </div>
                         <div className={`h-1.5 w-full ${t.search} rounded-full overflow-hidden`}>
-                          <motion.div initial={{ width: 0 }} animate={{ width: '65%' }} className="h-full bg-primary" />
+                          <motion.div initial={{ width: 0 }} animate={{ width: '75%' }} className="h-full bg-primary" />
                         </div>
                       </div>
 
                       <div className="space-y-3">
                         <div className="flex justify-between items-center">
-                          <span className="text-xs font-bold text-slate-500 flex items-center gap-2">
-                            <div className="w-2 h-2 rounded-full bg-blue-500" /> Test Papers
+                          <span className="text-xs font-bold text-blue-500 flex items-center gap-2">
+                            <div className="w-2 h-2 rounded-full bg-blue-500" /> Digital Notes
                           </span>
-                          <span className={`text-sm font-black ${t.heading}`}>310 pgs</span>
+                          <span className={`text-sm font-black ${t.heading}`}>{Math.round((user?.eco_stats?.total_pages_saved || 0) * 0.15)} pgs</span>
                         </div>
                         <div className={`h-1.5 w-full ${t.search} rounded-full overflow-hidden`}>
-                          <motion.div initial={{ width: 0 }} animate={{ width: '25%' }} className="h-full bg-blue-500" />
+                          <motion.div initial={{ width: 0 }} animate={{ width: '15%' }} className="h-full bg-blue-500" />
                         </div>
                       </div>
 
@@ -2178,7 +2428,7 @@ export default function StudentDashboard() {
                           <span className={`text-xs font-bold ${t.muted} flex items-center gap-2`}>
                             <div className="w-2 h-2 rounded-full bg-orange-500" /> Misc Docs
                           </span>
-                          <span className={`text-sm font-black ${t.heading}`}>110 pgs</span>
+                          <span className={`text-sm font-black ${t.heading}`}>{Math.round((user?.eco_stats?.total_pages_saved || 0) * 0.10)} pgs</span>
                         </div>
                         <div className={`h-1.5 w-full ${t.search} rounded-full overflow-hidden`}>
                           <motion.div initial={{ width: 0 }} animate={{ width: '10%' }} className="h-full bg-orange-500" />
@@ -2189,7 +2439,7 @@ export default function StudentDashboard() {
                     <button className={`w-full mt-8 py-4 ${t.search} hover:opacity-80 rounded-2xl text-[10px] font-black uppercase tracking-widest ${t.muted} transition-all border ${t.border}`}>
                       View Comprehensive Report
                     </button>
-                  </div>
+                  </motion.div>
 
                   {/* Dynamic Tip */}
                   <div className="bg-gradient-to-br from-[#1e612c] via-[#2B8A3E] to-[#37b24d] p-8 rounded-[2rem] shadow-xl shadow-[#2B8A3E]/20 text-white relative overflow-hidden group">

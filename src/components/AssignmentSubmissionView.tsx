@@ -218,19 +218,13 @@ export const AssignmentSubmissionView: React.FC<{ theme: any }> = ({ theme: t })
     };
 
     const calculateEcoImpact = (selectedFile: File) => {
+        // We simulate the page count based on file size for the preview, 
+        // but the real calculation happens on the server during upload.
         const estimatedPages = Math.max(1, Math.ceil(selectedFile.size / 51200));
-        const co2PerSheet = 0.5;
-        const totalSaved = estimatedPages * co2PerSheet;
-        let current = 0;
-        const interval = setInterval(() => {
-            current += 0.5;
-            if (current >= totalSaved) {
-                setCo2Saved(totalSaved);
-                clearInterval(interval);
-            } else {
-                setCo2Saved(current);
-            }
-        }, 50);
+        const waterSaved = estimatedPages * 10;
+        const co2SavedValue = estimatedPages * 4.64;
+        
+        setCo2Saved(co2SavedValue);
     };
 
     const formatNumber = (n: number) => n.toString().padStart(2, '0');

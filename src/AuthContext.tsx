@@ -78,7 +78,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           name: userData?.name || session.user.user_metadata?.full_name || 'User',
           role: finalRole as any,
           department: userData?.department || '',
-          avatar: userData?.avatar || session.user.user_metadata?.avatar_url
+          avatar: userData?.avatar || session.user.user_metadata?.avatar_url,
+          eco_stats: userData?.eco_stats || {
+            total_pages_saved: 0,
+            total_water_saved: 0,
+            total_co2_prevented: 0,
+            total_trees_preserved: 0
+          },
+          eco_level: userData?.eco_level || 1
         };
 
         setUser(freshUser);

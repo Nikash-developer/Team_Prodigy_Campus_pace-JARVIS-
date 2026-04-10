@@ -7,7 +7,7 @@ import {
   CheckCircle2, Clock, AlertCircle, ArrowLeft, ArrowRight,
   Edit3, MessageSquare, Scissors, Type, Maximize2,
   MoreVertical, Filter, SortDesc, Folder, ClipboardList, Droplets, User, X, Sparkles, Loader2,
-  ChevronLeft, Shield, Camera, Sun, Moon, HelpCircle
+  ChevronLeft, Shield, Camera, Sun, Moon, HelpCircle, Calendar
 } from 'lucide-react';
 import CountUp from 'react-countup';
 import { useAuth } from '../AuthContext';
@@ -80,6 +80,14 @@ export default function FacultyDashboard() {
   const [newAssignmentCourse, setNewAssignmentCourse] = useState("Env Science 101");
   const [assignmentFiles, setAssignmentFiles] = useState<File[]>([]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [attendanceMappings, setAttendanceMappings] = useState<any[]>([]);
+  const [selectedMapping, setSelectedMapping] = useState<any>(null);
+  const [markingStudents, setMarkingStudents] = useState<any[]>([]);
+  const [isMarkingLoading, setIsMarkingLoading] = useState(false);
+  const [markingTopic, setMarkingTopic] = useState('');
+  const [markingDate, setMarkingDate] = useState(new Date().toISOString().split('T')[0]);
+  const [defaulters, setDefaulters] = useState<any[]>([]);
+  const [activeAttendanceView, setActiveAttendanceView] = useState<'marking' | 'intelligence'>('marking');
 
   const [themeMode, setThemeMode] = useState<'Light' | 'Dark' | 'Eco'>('Light');
   const [facultyProfile, setFacultyProfile] = useState({
@@ -105,6 +113,20 @@ export default function FacultyDashboard() {
       document.documentElement.classList.remove('dark');
     }
   }, [themeMode]);
+
+  useEffect(() => {
+    const fetchMappings = async () => {
+      if (!user?.id) return;
+      try {
+        const response = await fetch(`/api/attendance/faculty/mappings/${user.id}`);
+        const data = await response.json();
+        setAttendanceMappings(data);
+      } catch (err) {
+        console.error("Failed to fetch mappings:", err);
+      }
+    };
+    fetchMappings();
+  }, [user?.id]);
 
   const t = themes[themeMode];
 
@@ -149,6 +171,79 @@ export default function FacultyDashboard() {
     document.execCommand(command, false);
     if (feedbackEditorRef.current) {
       setFeedback(feedbackEditorRef.current.innerHTML);
+    }
+  };
+
+  const handleStartMarking = async (mapping: any) => {
+    setSelectedMapping(mapping);
+    setIsMarkingLoading(true);
+    try {
+      // For now, mirroring the existing students list logic with id strings
+      const studentsInClass = [
+        { id: '1', name: "Alice Johnson", roll: "21CS01", status: 'present' },
+        { id: '2', name: "Bob Smith", roll: "21CS02", status: 'present' },
+        { id: '3', name: "Charlie Brown", roll: "21CS03", status: 'absent' },
+        { id: '4', name: "Diana Prince", roll: "21CS04", status: 'present' },
+        { id: '5', name: "Evan Wright", roll: "21CS05", status: 'present' }
+      ];
+      setMarkingStudents(studentsInClass);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsMarkingLoading(false);
+    }
+
+    // Fetch defaulters for this mapping
+    try {
+      const res = await fetch(`/api/attendance/defaulters/${mapping.id}`);
+      const data = await res.json();
+      setDefaulters(data);
+    } catch (err) {
+      console.error("Defaulter fetch failed", err);
+    }
+  };
+
+  const handleToggleStatus = (studentId: string) => {
+    setMarkingStudents(prev => prev.map(s => 
+      s.id === studentId 
+        ? { ...s, status: s.status === 'present' ? 'absent' : 'present' }
+        : s
+    ));
+  };
+
+  const handleSubmitAttendance = async () => {
+    if (!selectedMapping || !markingTopic) {
+      setToastMessage("Please provide subject and topic.");
+      return;
+    }
+
+    setIsMarkingLoading(true);
+    try {
+      const payload = {
+        mappingId: selectedMapping.id,
+        lectureDate: markingDate,
+        topic: markingTopic,
+        attendance: markingStudents.map(s => ({ studentId: s.id, status: s.status })),
+        facultyId: user?.id
+      };
+
+      const res = await fetch('/api/attendance/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (res.ok) {
+        setToastMessage("Attendance submitted successfully!");
+        setSelectedMapping(null);
+        setMarkingTopic('');
+      } else {
+        throw new Error("Submission failed");
+      }
+    } catch (err) {
+      setToastMessage("Error submitting attendance.");
+    } finally {
+      setIsMarkingLoading(false);
     }
   };
 
@@ -244,7 +339,7 @@ export default function FacultyDashboard() {
           </div>
         </div>
         <nav className="hidden lg:flex items-center gap-8 relative mr-8">
-          {['Assignments', 'Notices', 'Students', 'Settings'].map(nav => (
+          {['Assignments', 'Notices', 'Students', 'Attendance', 'Settings'].map(nav => (
             <button
               key={nav}
               onClick={() => setActiveNav(nav)}
@@ -342,6 +437,7 @@ export default function FacultyDashboard() {
                   { id: 'Assignments', label: 'Assignments', icon: <ClipboardList size={20} /> },
                   { id: 'Notices', label: 'Notices', icon: <Bell size={20} /> },
                   { id: 'Students', label: 'Student List', icon: <Users size={20} /> },
+                  { id: 'Attendance', label: 'Attendance', icon: <Calendar size={20} /> },
                   { id: 'Settings', label: 'Settings', icon: <Settings size={20} /> }
                 ].map((item) => (
                   <button
@@ -680,6 +776,311 @@ export default function FacultyDashboard() {
               className="flex-1 h-full"
             >
               <StudentListView stats={stats} theme={t} themeMode={themeMode} />
+            </motion.div>
+          ) : activeNav === 'Attendance' ? (
+            <motion.div
+              key="attendance"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              transition={{ duration: 0.3 }}
+              className="flex-1 h-full overflow-y-auto styled-scrollbar p-4 lg:p-8"
+            >
+              <div className="max-w-6xl mx-auto space-y-8 pb-32">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-8">
+                  </div>
+                  {selectedMapping && (
+                    <div className="flex items-center gap-4">
+                      <div className={`p-1 ${t.search} rounded-2xl flex gap-1`}>
+                        {['marking', 'intelligence'].map((v: any) => (
+                          <button
+                            key={v}
+                            onClick={() => setActiveAttendanceView(v)}
+                            className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
+                              activeAttendanceView === v 
+                                ? 'bg-white text-emerald-500 shadow-sm' 
+                                : 'text-slate-400 hover:text-slate-600'
+                            }`}
+                          >
+                            {v}
+                          </button>
+                        ))}
+                      </div>
+                      <button 
+                        onClick={() => setSelectedMapping(null)}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-xl border ${t.border} ${t.muted} hover:bg-slate-50 transition-all text-sm font-bold`}
+                      >
+                        <ArrowLeft size={16} /> Back
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {!selectedMapping ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {attendanceMappings.length > 0 ? (
+                      attendanceMappings.map((mapping: any) => (
+                        <motion.div
+                          key={mapping.id}
+                          whileHover={{ y: -5 }}
+                          onClick={() => handleStartMarking(mapping)}
+                          className={`${t.card} p-6 rounded-3xl border ${t.border} shadow-sm cursor-pointer group hover:border-[#22C55E]/30 transition-all`}
+                        >
+                          <div className={`w-12 h-12 rounded-2xl ${t.accentBg} ${t.accent} flex items-center justify-center mb-4 group-hover:scale-110 transition-transform`}>
+                            <BookOpen size={24} />
+                          </div>
+                          <h3 className={`text-xl font-black ${t.heading} mb-1`}>{mapping.subject_name}</h3>
+                          <p className={`text-xs font-bold ${t.muted} uppercase tracking-widest`}>
+                            {mapping.department} \u2022 Div {mapping.division}
+                          </p>
+                          <div className="mt-6 flex items-center justify-between">
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Semester {mapping.semester}</span>
+                            <div className={`p-2 rounded-full ${t.accentBg} ${t.accent} opacity-0 group-hover:opacity-100 transition-opacity`}>
+                              <ChevronRight size={18} />
+                            </div>
+                          </div>
+                        </motion.div>
+                      ))
+                    ) : (
+                      <div className="col-span-full bg-white/50 border border-dashed border-slate-200 rounded-[2rem] p-12 text-center">
+                        <Calendar size={48} className="mx-auto text-slate-200 mb-4" />
+                        <h3 className="text-xl font-black text-slate-400">No Subjects Mapped</h3>
+                        <p className="text-slate-400 text-sm font-medium mt-2">Subjects assigned to you will appear here for attendance marking.</p>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    {/* Marking Form */}
+                    <div className="lg:col-span-2 space-y-6">
+                      <div className={`${t.card} p-8 rounded-[2rem] border ${t.border} shadow-sm overflow-hidden relative`}>
+                        <div className="absolute top-0 right-0 p-8 opacity-5">
+                          <CheckCircle2 size={120} className={t.accent} />
+                        </div>
+                        <h3 className={`text-xl font-black ${t.heading} mb-6 flex items-center gap-3`}>
+                          <Clock size={20} className={t.accent} /> Marking Attendance
+                        </h3>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                          <div className="space-y-2">
+                            <label className={`text-[10px] font-black ${t.muted} uppercase ml-2`}>Lecture Date</label>
+                            <input 
+                              type="date" 
+                              value={markingDate}
+                              onChange={(e) => setMarkingDate(e.target.value)}
+                              className={`w-full p-4 ${t.search} border-none rounded-2xl focus:ring-2 focus:ring-[#DCFCE7] font-bold text-sm ${t.text}`}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <label className={`text-[10px] font-black ${t.muted} uppercase ml-2`}>Lecture Topic</label>
+                            <input 
+                              placeholder="e.g. Intro to Sustainability" 
+                              value={markingTopic}
+                              onChange={(e) => setMarkingTopic(e.target.value)}
+                              className={`w-full p-4 ${t.search} border-none rounded-2xl focus:ring-2 focus:ring-[#DCFCE7] font-bold text-sm ${t.text}`}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="overflow-x-auto">
+                          <table className="w-full">
+                            <thead>
+                              <tr className={`text-[10px] font-black ${t.muted} uppercase tracking-widest border-b ${t.border}`}>
+                                <th className="px-4 py-3 text-left">Student</th>
+                                <th className="px-4 py-3 text-left">Roll No</th>
+                                <th className="px-4 py-3 text-center">Status</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-50">
+                              {markingStudents.map((student) => (
+                                <tr key={student.id} className="group">
+                                  <td className="px-4 py-4">
+                                    <div className="flex items-center gap-3">
+                                      <div className={`w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-[10px] font-black ${t.muted}`}>
+                                        {student.name.split(' ').map((n: string) => n[0]).join('')}
+                                      </div>
+                                      <span className={`text-sm font-bold ${t.heading}`}>{student.name}</span>
+                                    </div>
+                                  </td>
+                                  <td className={`px-4 py-4 text-xs font-medium ${t.muted}`}>{student.roll}</td>
+                                  <td className="px-4 py-4">
+                                    <div className="flex items-center justify-center gap-2">
+                                      <button
+                                        onClick={() => handleToggleStatus(student.id)}
+                                        className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${
+                                          student.status === 'present' 
+                                            ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' 
+                                            : 'bg-slate-100 text-slate-400 hover:bg-red-50'
+                                        }`}
+                                      >
+                                        {student.status === 'present' ? 'Present' : 'Absent'}
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+
+                        <button
+                          onClick={handleSubmitAttendance}
+                          disabled={isMarkingLoading}
+                          className="w-full mt-10 py-4 bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-emerald-500/20 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                        >
+                          {isMarkingLoading ? (
+                            <Loader2 className="animate-spin" size={18} />
+                          ) : (
+                            <Plus size={18} />
+                          )}
+                          Complete \u0026 Submit Attendance
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Quick Stats sidebar */}
+                    <div className="space-y-6">
+                      <div className={`${t.card} p-8 rounded-[2rem] border ${t.border} shadow-sm`}>
+                        <h3 className={`text-lg font-black ${t.heading} mb-6`}>Summary</h3>
+                        <div className="space-y-6">
+                          <div className="flex items-center justify-between">
+                            <span className={`text-xs font-bold ${t.muted}`}>Present</span>
+                            <span className="text-sm font-black text-emerald-500">{markingStudents.filter(s => s.status === 'present').length}</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className={`text-xs font-bold ${t.muted}`}>Absent</span>
+                            <span className="text-sm font-black text-red-500">{markingStudents.filter(s => s.status === 'absent').length}</span>
+                          </div>
+                          <div className={`h-1.5 w-full ${t.search} rounded-full overflow-hidden`}>
+                            <motion.div 
+                              initial={{ width: 0 }} 
+                              animate={{ width: `${(markingStudents.filter(s => s.status === 'present').length / markingStudents.length) * 100}%` }} 
+                              className="h-full bg-emerald-500" 
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="bg-gradient-to-br from-emerald-500 to-teal-500 p-8 rounded-[2rem] text-white shadow-xl shadow-emerald-500/20">
+                        <AlertCircle className="mb-4" size={24} />
+                        <h3 className="text-lg font-black mb-2">Pro Tip</h3>
+                        <p className="text-white/80 text-xs font-medium leading-relaxed">
+                          Accurate attendance data powers the student's early warning system. Ensure the topic name matches the lesson plan for better analytics.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ) : activeAttendanceView === 'intelligence' ? (
+                  <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                    <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                      <div className={`${t.card} p-8 rounded-[2rem] border ${t.border} shadow-sm lg:col-span-1`}>
+                        <h4 className={`text-[10px] font-black ${t.muted} uppercase tracking-[0.2em] mb-4`}>Class Performance</h4>
+                        <div className="flex items-end gap-2">
+                          <span className={`text-4xl font-black ${t.heading}`}>82.4%</span>
+                          <span className="text-xs font-bold text-emerald-500 pb-1">+4.2%</span>
+                        </div>
+                      </div>
+                      <div className={`${t.card} p-8 rounded-[2rem] border ${t.border} shadow-sm lg:col-span-1`}>
+                        <h4 className={`text-[10px] font-black ${t.muted} uppercase tracking-[0.2em] mb-4`}>Critical Risk</h4>
+                        <div className="flex items-end gap-2">
+                          <span className={`text-4xl font-black text-red-500`}>{defaulters.filter(d => d.risk_level === 'critical').length}</span>
+                          <span className="text-xs font-bold text-slate-400 pb-1">students</span>
+                        </div>
+                      </div>
+                      <div className={`${t.card} p-8 rounded-[2rem] border ${t.border} shadow-sm lg:col-span-2 relative overflow-hidden`}>
+                        <div className="absolute top-0 right-0 p-8 opacity-5">
+                          <Sparkles size={100} className="text-emerald-500" />
+                        </div>
+                        <h4 className={`text-[10px] font-black ${t.muted} uppercase tracking-[0.2em] mb-2`}>Smart Suggestion</h4>
+                        <p className={`text-sm font-medium ${t.heading} leading-relaxed`}>
+                          Class attendance is at peak for Monday sessions. Consider moving high-impact topics to morning slots.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className={`${t.card} rounded-[2.5rem] border ${t.border} shadow-sm overflow-hidden`}>
+                      <div className="p-8 border-b border-slate-50 flex items-center justify-between">
+                        <div>
+                          <h3 className={`text-xl font-black ${t.heading}`}>Defaulter List (Below 75%)</h3>
+                          <p className={`text-xs font-bold ${t.muted} mt-1`}>Students requiring urgent intervention</p>
+                        </div>
+                        <button 
+                          className={`px-6 py-2.5 bg-red-500 hover:bg-red-600 text-white text-xs font-black rounded-xl transition-all shadow-lg shadow-red-500/20 flex items-center gap-2`}
+                          onClick={() => setToastMessage("Warning emails queued for all defaulters.")}
+                        >
+                          <Bell size={16} /> Send All Warnings
+                        </button>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left">
+                          <thead>
+                            <tr className={`bg-slate-50/50 text-[10px] font-black ${t.muted} uppercase tracking-[0.2em]`}>
+                              <th className="px-8 py-5">Student</th>
+                              <th className="px-8 py-5 text-center">Attendance</th>
+                              <th className="px-8 py-5">Risk State</th>
+                              <th className="px-8 py-5">Intervention</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-50">
+                            {defaulters.length > 0 ? (
+                              defaulters.map((d: any) => (
+                                <tr key={d.id} className="hover:bg-slate-50/30 transition-colors">
+                                  <td className="px-8 py-6">
+                                    <div className="flex items-center gap-3">
+                                      <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center overflow-hidden">
+                                        <img src={d.auth_users?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${d.id}`} alt="" />
+                                      </div>
+                                      <div>
+                                        <p className={`text-sm font-black ${t.heading}`}>{d.auth_users?.name}</p>
+                                        <p className={`text-[10px] font-bold ${t.muted}`}>{d.auth_users?.email}</p>
+                                      </div>
+                                    </div>
+                                  </td>
+                                  <td className="px-8 py-6">
+                                    <div className="flex flex-col items-center gap-2">
+                                      <span className={`text-sm font-black ${d.risk_level === 'critical' ? 'text-red-500' : 'text-orange-500'}`}>
+                                        {d.attendance_percentage.toFixed(1)}%
+                                      </span>
+                                      <div className="w-24 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                        <div 
+                                          className={`h-full ${d.risk_level === 'critical' ? 'bg-red-500' : 'bg-orange-500'}`} 
+                                          style={{ width: `${d.attendance_percentage}%` }}
+                                        />
+                                      </div>
+                                    </div>
+                                  </td>
+                                  <td className="px-8 py-6">
+                                    <span className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest ${
+                                      d.risk_level === 'critical' ? 'bg-red-50 text-red-500' : 'bg-orange-50 text-orange-500'
+                                    }`}>
+                                      {d.risk_level}
+                                    </span>
+                                  </td>
+                                  <td className="px-8 py-6">
+                                    <button className={`p-2 rounded-xl border ${t.border} text-slate-400 hover:text-emerald-500 hover:border-emerald-500/30 transition-all`}>
+                                      <MessageSquare size={18} />
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))
+                            ) : (
+                              <tr>
+                                <td colSpan={4} className="px-8 py-20 text-center">
+                                  <div className="flex flex-col items-center gap-3 text-slate-300">
+                                    <CheckCircle2 size={40} />
+                                    <p className="text-sm font-bold">No students in critical risk for this subject.</p>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              </div>
             </motion.div>
           ) : activeNav === 'Notices' ? (
             <motion.div

@@ -4,7 +4,13 @@ export interface User {
   role: 'student' | 'faculty' | 'hod' | 'admin';
   name: string;
   department: string;
-  avatar?: string;
+  eco_stats?: {
+    total_pages_saved: number;
+    total_water_saved: number;
+    total_co2_prevented: number;
+    total_trees_preserved: number;
+  };
+  eco_level?: number;
 }
 
 export interface Assignment {

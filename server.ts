@@ -19,6 +19,7 @@ import noticeRoutes from './server/routes/noticeRoutes';
 import chatbotRoutes from './server/routes/chatbotRoutes';
 import questionPaperRoutes from './server/routes/questionPaperRoutes';
 import quizRoutes from './server/routes/quizRoutes';
+import attendanceRoutes from './server/routes/attendanceRoutes';
 
 dotenv.config();
 
@@ -55,6 +56,7 @@ app.use('/api/notices', dbMiddleware, noticeRoutes);
 app.use('/api/chatbot', dbMiddleware, chatbotRoutes);
 app.use('/api/quiz', dbMiddleware, quizRoutes);
 app.use('/api', dbMiddleware, questionPaperRoutes);
+app.use('/api/attendance', dbMiddleware, attendanceRoutes);
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
 // --- VITE / STATIC SERVING ---
