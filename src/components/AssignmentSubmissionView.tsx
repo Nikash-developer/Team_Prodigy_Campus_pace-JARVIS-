@@ -167,56 +167,67 @@ export const AssignmentSubmissionView: React.FC<AssignmentSubmissionViewProps> =
     };
 
     const handleActualUpload = async (selectedFile: File) => {
-        setUploadStatus('uploading');
-        setUploadProgress(20);
-
         try {
-            const formData = new FormData();
-            formData.append('file', selectedFile);
-            formData.append('assignmentId', selectedAssignment.id.toString());
-            if (user?.id) formData.append('student_id', user.id);
-            if (user?.email) formData.append('student_email', user.email);
+            setUploadStatus('uploading');
+            setUploadProgress(10);
 
+            // 1. Upload to Supabase Storage first (Bypasses Vercel Limit)
+            const fileExt = selectedFile.name.split('.').pop();
+            const fileName = `${user?.id || 'anon'}_${Date.now()}.${fileExt}`;
+            const filePath = `submissions/${fileName}`;
+
+            setUploadProgress(20);
+            
+            const { error: storageError, data: storageData } = await supabase.storage
+                .from('assignments')
+                .upload(filePath, selectedFile, {
+                    cacheControl: '3600',
+                    upsert: false
+                });
+
+            if (storageError) {
+                console.error("Supabase Storage Error:", storageError);
+                throw new Error(`Cloud Storage Error: ${storageError.message}. Make sure the 'assignments' bucket exists and is public.`);
+            }
+
+            setUploadProgress(60);
+
+            // 2. Get Public URL
+            const { data: { publicUrl } } = supabase.storage
+                .from('assignments')
+                .getPublicUrl(filePath);
+
+            // 3. Send URL to Backend (Metadata only, very small payload)
             const rawToken = localStorage.getItem('token');
             const authHeader = rawToken && rawToken !== 'undefined' && rawToken !== 'null'
                 ? `Bearer ${rawToken}`
                 : '';
 
-            setUploadProgress(45);
-
             const res = await fetch('/api/upload', {
                 method: 'POST',
-                headers: authHeader ? { 'Authorization': authHeader } : {},
-                body: formData
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(authHeader ? { 'Authorization': authHeader } : {})
+                },
+                body: JSON.stringify({
+                    assignmentId: selectedAssignment.id,
+                    file_url: publicUrl,
+                    file_name: selectedFile.name
+                })
             });
 
             if (!res.ok) {
-                if (res.status === 413) {
-                    throw new Error('File is too large for the server. Vercel limit is 4.5MB total. Please compress your PDF below 3.8MB and try again.');
-                }
-                
-                // Try to parse JSON error, fallback to text if not JSON
-                let errorData;
                 const contentType = res.headers.get("content-type");
+                let errorData;
                 if (contentType && contentType.includes("application/json")) {
                     errorData = await res.json();
                 } else {
-                    const textError = await res.text();
-                    console.error("Non-JSON Error Response:", textError);
-                    errorData = { error: 'Server returned an unexpected error format. It might be due to a large file or timeout.' };
+                    errorData = { error: 'Backend failed to record the submission URL.' };
                 }
-                
                 throw new Error(errorData.error || 'Upload failed');
             }
 
-            // ULTIMATE JSON SHIELD: Catching errors even on successful HTTP status
-            let result;
-            try {
-                result = await res.json();
-            } catch (jsonErr) {
-                console.error("JSON Parse Error on Success Path:", jsonErr);
-                throw new Error("Server confirmed upload but sent an invalid response format. Please refresh and check if your assignment is visible.");
-            }
+            const result = await res.json();
             setUploadProgress(100);
             setUploadStatus('success');
 
@@ -257,8 +268,8 @@ export const AssignmentSubmissionView: React.FC<AssignmentSubmissionViewProps> =
             alert("Only PDF and DOCX files are supported.");
             return;
         }
-        if (selectedFile.size > 3.8 * 1024 * 1024) {
-            alert("This file is likely too large for Vercel's 4.5MB total request limit. Please compress your PDF below 3.8MB and try again.");
+        if (selectedFile.size > 50 * 1024 * 1024) {
+            alert("This file is too large even for Cloud Storage. Please keep it under 50MB.");
             return;
         }
         handleActualUpload(selectedFile);
@@ -444,7 +455,7 @@ export const AssignmentSubmissionView: React.FC<AssignmentSubmissionViewProps> =
                                         <h3 className={`text-2xl font-black ${t.heading} mb-2`}>Upload your assignment</h3>
                                         <p className={`${t.muted} text-sm font-medium max-w-xs mx-auto`}>
                                             Drag & drop your PDF or DOCX file here to save a tree.<br />
-                                            <span className={`text-[10px] font-bold ${t.muted} opacity-60 uppercase mt-2 block tracking-tight`}>Vercel Size Limit: 4.5MB (Max)</span>
+                                            <span className={`text-[10px] font-bold ${t.muted} opacity-60 uppercase mt-2 block tracking-tight`}>Cloud Storage Limit: 50MB (Ready)</span>
                                         </p>
                                     </div>
                                     <label className="cursor-pointer bg-primary text-white px-8 py-4 rounded-2xl font-black hover:scale-105 transition-all shadow-xl shadow-primary/20 inline-block pointer-events-auto">

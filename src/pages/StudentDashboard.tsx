@@ -22,6 +22,7 @@ import { Notice, Assignment } from '../types';
 
 import { AssignmentSubmissionView } from '../components/AssignmentSubmissionView';
 import { allQuestionPapers } from '../lib/mockPapers';
+import { supabase } from '../lib/supabase';
 import { WhatIfSimulator } from '../components/attendance/WhatIfSimulator';
 import { PredictiveWarning } from '../components/attendance/PredictiveWarning';
 import { AttendanceAnalytics } from '../types';
@@ -1439,18 +1440,35 @@ export default function StudentDashboard() {
         return;
       }
 
-      if (assignment.uploadedFile.size > 3.8 * 1024 * 1024) {
-        alert("This file is too large for the Vercel 4.5MB limit. Please compress your PDF below 3.8MB and try again via the sidebar.");
+      if (assignment.uploadedFile.size > 50 * 1024 * 1024) {
+        alert("This file is too large even for Cloud Storage. Please keep it under 50MB.");
         return;
       }
 
       try {
-        const formData = new FormData();
-        formData.append('file', assignment.uploadedFile);
-        formData.append('assignmentId', id.toString());
-        if (user?.id) formData.append('student_id', user.id);
-        if (user?.email) formData.append('student_email', user.email); // CRITICAL: Identity Bridge
+        // 1. Upload to Supabase Storage first (Bypasses Vercel Limit)
+        const fileExt = assignment.uploadedFile.name.split('.').pop();
+        const fileName = `${user?.id || 'anon'}_${Date.now()}.${fileExt}`;
+        const filePath = `submissions/${fileName}`;
 
+        const { error: storageError } = await supabase.storage
+          .from('assignments')
+          .upload(filePath, assignment.uploadedFile, {
+            cacheControl: '3600',
+            upsert: false
+          });
+
+        if (storageError) {
+          console.error("Supabase Storage Error:", storageError);
+          throw new Error(`Cloud Storage Error: ${storageError.message}. Ensure 'assignments' bucket is public.`);
+        }
+
+        // 2. Get Public URL
+        const { data: { publicUrl } } = supabase.storage
+          .from('assignments')
+          .getPublicUrl(filePath);
+
+        // 3. Send URL to Backend
         const rawToken = localStorage.getItem('token');
         const authHeader = rawToken && rawToken !== 'undefined' && rawToken !== 'null'
           ? `Bearer ${rawToken}`
@@ -1458,8 +1476,15 @@ export default function StudentDashboard() {
 
         const res = await fetch('/api/upload', {
           method: 'POST',
-          headers: authHeader ? { 'Authorization': authHeader } : {},
-          body: formData
+          headers: {
+            'Content-Type': 'application/json',
+            ...(authHeader ? { 'Authorization': authHeader } : {})
+          },
+          body: JSON.stringify({
+            assignmentId: id,
+            file_url: publicUrl,
+            file_name: assignment.uploadedFile.name
+          })
         });
 
         if (res.ok) {

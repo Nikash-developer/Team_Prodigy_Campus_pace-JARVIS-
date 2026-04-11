@@ -41,45 +41,54 @@ export const uploadFile = async (req: any, res: any) => {
             targetUser = mongoUser;
         }
 
+        const cloudFileUrl = req.body.file_url;
+        const cloudFileName = req.body.file_name;
         const file = req.file;
-        if (!file) return res.status(400).json({ error: 'No file uploaded' });
+
+        if (!file && !cloudFileUrl) {
+            return res.status(400).json({ error: 'No file uploaded and no cloud URL provided' });
+        }
 
         let pageCount = 1;
-        if (file.mimetype === 'application/pdf') {
-            try {
-                // LIGHTWEIGHT PDF SCANNING (Zero dependencies)
-                // We convert the first 16KB of the buffer to a string for scanning
-                const pdfString = file.buffer.toString('utf8', 0, 16384);
-                const pageMatch = pdfString.match(/\/Count\s+(\d+)/);
-                if (pageMatch && pageMatch[1]) {
-                    pageCount = parseInt(pageMatch[1], 10);
-                } else {
-                    // Fallback: Count /Type /Page manually if /Count is hidden
-                    const pageNodes = (file.buffer.toString().match(/\/Type\s*\/Page\b/g) || []).length;
-                    pageCount = Math.max(1, pageNodes);
+
+        if (file) {
+            // LEGACY: Process raw buffer (Limited to 4.5MB)
+            if (file.mimetype === 'application/pdf') {
+                try {
+                    const pdfString = file.buffer.toString('utf8', 0, 16384);
+                    const pageMatch = pdfString.match(/\/Count\s+(\d+)/);
+                    if (pageMatch && pageMatch[1]) {
+                        pageCount = parseInt(pageMatch[1], 10);
+                    } else {
+                        const pageNodes = (file.buffer.toString().match(/\/Type\s*\/Page\b/g) || []).length;
+                        pageCount = Math.max(1, pageNodes);
+                    }
+                } catch (err) {
+                    pageCount = 1;
                 }
-                console.log(`[Eco-Sync] Detected ${pageCount} pages for impact calculation.`);
-            } catch (err) {
-                console.error("PDF Scan failed, falling back to 1 page:", err);
-                pageCount = 1;
             }
+        } else if (cloudFileUrl) {
+            // NEW: Process Cloud URL (Supports up to 50MB+)
+            // Since the file is already on Supabase, we use a conservative default for impact
+            // In a pro version, we'd use a lambda to scan the file on Supabase
+            pageCount = req.body.page_count || 4; // Default to 4 pages if unknown
+            console.log(`[Eco-Sync] Cloud file detected: ${cloudFileName}. Using estimated page count: ${pageCount}`);
         }
 
         const eco_update = calculateImpact(pageCount);
         const plagiarism_score = Math.floor(Math.random() * 8) + 2;
 
-        // PRE-GENERATE ID FOR URL (Optimizes one DB hop)
         const submissionId = new mongoose.Types.ObjectId();
-        const real_url = `/api/submissions/download/${submissionId}`;
+        // Use cloud URL if provided, otherwise generate local download URL
+        const final_url = cloudFileUrl || `/api/submissions/download/${submissionId}`;
 
-        // SAVE TO MONGODB (Stateless storage) - SINGLE OPERATION
         await Submission.create({
             _id: submissionId,
             student_id: targetUser?._id || req.user?._id,
             assignment_id: assignment_id,
-            file_data: file.buffer,
-            content_type: file.mimetype,
-            file_url: real_url,
+            file_data: file ? file.buffer : null,
+            content_type: file ? file.mimetype : 'application/pdf',
+            file_url: final_url,
             page_count: pageCount,
             plagiarism_score: plagiarism_score,
             status: "Submitted",
