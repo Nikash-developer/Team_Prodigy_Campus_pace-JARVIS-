@@ -31,8 +31,17 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
   const { login } = useAuth();
+  const [configError, setConfigError] = useState<string | null>(null);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  React.useEffect(() => {
+    // Check for critical frontend environment variables
+    const url = import.meta.env.VITE_SUPABASE_URL;
+    const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
+    
+    if (!url || !key || url.includes('YOUR_') || key.includes('YOUR_')) {
+      setConfigError('Supabase credentials missing. Sign-in features will not work until you add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to your Vercel Environment Variables.');
+    }
+  }, []);
     e.preventDefault();
     setIsLoading(true);
     setError('');
@@ -258,6 +267,36 @@ export default function LoginPage() {
                 <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-100"></div></div>
                 <span className="relative px-4 bg-white">or use email</span>
               </div>
+
+              {configError && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="mb-8 p-6 bg-amber-50 border-2 border-amber-200 rounded-[2rem] text-amber-800 shadow-xl shadow-amber-500/5 relative overflow-hidden"
+                >
+                  <div className="absolute top-0 right-0 p-4 opacity-10">
+                    <ShieldCheck size={40} />
+                  </div>
+                  <div className="flex items-start gap-4 relative z-10">
+                    <div className="p-3 bg-amber-200/50 rounded-2xl text-amber-700">
+                      <AlertCircle size={24} />
+                    </div>
+                    <div>
+                      <h4 className="font-black text-sm uppercase tracking-wider mb-1">Configuration Warning</h4>
+                      <p className="text-xs font-bold leading-relaxed opacity-90">
+                        {configError}
+                      </p>
+                      <a 
+                        href="/Deployment_Setup_Guide.md" 
+                        target="_blank"
+                        className="inline-block mt-3 text-xs font-black text-amber-700 underline decoration-2 underline-offset-4 hover:text-amber-900 transition-colors"
+                      >
+                        Read Setup Guide →
+                      </a>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
 
               {error && (
                 <motion.div

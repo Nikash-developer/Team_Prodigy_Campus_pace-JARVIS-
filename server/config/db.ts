@@ -28,8 +28,12 @@ export const connectDB = async () => {
             
             if (!uri) {
                 if (process.env.VERCEL === "1" || process.env.NODE_ENV === "production") {
-                    console.error("CRITICAL: MONGO_URI is missing in production environment.");
-                    throw new Error("MONGO_URI missing");
+                    console.error("--------------------------------------------------");
+                    console.error("WARNING: MONGO_URI is missing in production.");
+                    console.error("Database connection features will be disabled.");
+                    console.error("Please add MONGO_URI to your Vercel Environment Variables.");
+                    console.error("--------------------------------------------------");
+                    return null;
                 }
 
                 console.log("No MONGO_URI found, initializing singleton in-memory DB...");

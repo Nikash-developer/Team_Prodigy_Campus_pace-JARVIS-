@@ -39,7 +39,8 @@ const dbMiddleware = async (req: any, res: any, next: any) => {
         const conn = await connectDB();
         if (!conn) {
             return res.status(503).json({
-                error: 'Database connection failed. Please check your MONGO_URI.'
+                error: 'Database connection failed. [ACTION REQUIRED]: Please add your MONGO_URI to the Vercel Environment Variables and redeploy.',
+                status: 'DB_UNCONFIGURED'
             });
         }
         next();
