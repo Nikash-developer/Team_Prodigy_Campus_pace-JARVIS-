@@ -1458,7 +1458,7 @@ export default function StudentDashboard() {
           });
 
         const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error("Cloud Storage Timeout (45s). This often means your CORS settings in Supabase are blocking the connection.")), 45000)
+          setTimeout(() => reject(new Error("Cloud Storage Timeout (45s). This often means your CORS settings in Supabase are blocking the connection. Please follow the setup guide.")), 45000)
         );
 
         const { error: storageError } = await Promise.race([uploadPromise, timeoutPromise]) as any;
@@ -1466,7 +1466,7 @@ export default function StudentDashboard() {
         if (storageError) {
           console.error("Supabase Storage Error:", storageError);
           let detailedMsg = storageError.message;
-          if (detailedMsg.includes("fetch")) detailedMsg = "Network/CORS block. Please add your domain to Allowed Origins in Supabase Storage settings.";
+          if (detailedMsg.includes("fetch")) detailedMsg = "Network/CORS block. Please add your Vercel domain to Allowed Origins in Supabase Storage Setup.";
           throw new Error(`Cloud Error: ${detailedMsg}`);
         }
 
@@ -1541,7 +1541,7 @@ export default function StudentDashboard() {
           console.log("Assignment uploaded and eco-impact recorded:", result.eco_impact);
         } else {
           if (res.status === 413) {
-            throw new Error('File is too large for the server. Vercel limit is 4.5MB total. Please compress your PDF below 3.8MB.');
+            throw new Error('File is too large for the current hosting plan (Vercel Limit). Works locally up to 40MB.');
           }
           
           let errorData;

@@ -173,14 +173,14 @@ export const AssignmentSubmissionView: React.FC<AssignmentSubmissionViewProps> =
             setUploadStatus('uploading');
             setUploadProgress(10);
 
-            // 1. Upload to Supabase Storage (Bypasses Vercel Limit)
+            // 1. Upload to Supabase Storage directly (Bypasses Vercel 4.5MB Limit)
             const fileExt = fileToUpload.name.split('.').pop();
             const fileName = `${user?.id || 'anon'}_${Date.now()}.${fileExt}`;
             const filePath = `submissions/${fileName}`;
 
             setUploadProgress(20);
             
-            // TIMEOUT & RACE: Ensure we don't hang at 20%
+            // TIMEOUT & RACE: Catch CORS loops immediately
             const uploadPromise = supabase.storage
                 .from('assignments')
                 .upload(filePath, fileToUpload, {
@@ -189,7 +189,7 @@ export const AssignmentSubmissionView: React.FC<AssignmentSubmissionViewProps> =
                 });
 
             const timeoutPromise = new Promise((_, reject) => 
-                setTimeout(() => reject(new Error("Cloud Storage Timeout (45s). This often means your CORS settings in Supabase are blocking the connection.")), 45000)
+                setTimeout(() => reject(new Error("Cloud Storage Timeout (45s). This means your CORS settings in Supabase are blocking the connection. Please follow the setup guide.")), 45000)
             );
 
             const { error: storageError } = await Promise.race([uploadPromise, timeoutPromise]) as any;
@@ -197,7 +197,7 @@ export const AssignmentSubmissionView: React.FC<AssignmentSubmissionViewProps> =
             if (storageError) {
                 console.error("Supabase Storage Error:", storageError);
                 let detailedMsg = storageError.message;
-                if (detailedMsg.includes("fetch")) detailedMsg = "Network/CORS block. Please add your domain to Allowed Origins in Supabase Storage settings.";
+                if (detailedMsg.includes("fetch")) detailedMsg = "Network/CORS block. Please add your Vercel domain to Allowed Origins in Supabase Storage Setup.";
                 throw new Error(`Cloud Error: ${detailedMsg}`);
             }
 
@@ -208,7 +208,7 @@ export const AssignmentSubmissionView: React.FC<AssignmentSubmissionViewProps> =
                 .from('assignments')
                 .getPublicUrl(filePath);
 
-            // 3. Send URL to Backend (Metadata only)
+            // 3. Send URL to Backend for Eco/Plagiarism calculations (Tiny Payload)
             const rawToken = localStorage.getItem('token');
             const authHeader = rawToken && rawToken !== 'undefined' && rawToken !== 'null'
                 ? `Bearer ${rawToken}`
@@ -228,8 +228,13 @@ export const AssignmentSubmissionView: React.FC<AssignmentSubmissionViewProps> =
             });
 
             if (!res.ok) {
-                const text = await res.text();
-                throw new Error(text.substring(0, 100) || 'Stateless sync failed');
+                const contentType = res.headers.get("content-type");
+                let text = await res.text();
+                try {
+                    const json = JSON.parse(text);
+                    if (json.error) text = json.error;
+                } catch(e) {}
+                throw new Error(text.substring(0, 150) || 'Stateless sync failed');
             }
 
             const result = await res.json();

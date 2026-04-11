@@ -5,9 +5,14 @@ import { calculateImpact } from '../utils/ecoEngine';
 import path from 'path';
 import fs from 'fs';
 import mongoose from 'mongoose';
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = process.env.VITE_SUPABASE_URL || '';
+const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY || '';
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 const storage = multer.memoryStorage();
-export const upload = multer({ storage, limits: { fileSize: 4.5 * 1024 * 1024 } }); // Vercel limit is 4.5MB total
+export const upload = multer({ storage, limits: { fileSize: 40 * 1024 * 1024 } }); // Local 40MB Limit
 
 export const uploadFile = async (req: any, res: any) => {
     try {
@@ -50,9 +55,33 @@ export const uploadFile = async (req: any, res: any) => {
         }
 
         let pageCount = 1;
+        let final_url = cloudFileUrl || '';
 
         if (file) {
-            // LEGACY: Process raw buffer (Limited to 4.5MB)
+            // BACKEND SUPABASE UPLOAD: Bypasses Client Cors
+            console.log(`[Eco-Sync] Uploading ${file.originalname} to Supabase from server...`);
+            const fileExt = file.originalname.split('.').pop();
+            const fileName = `${targetUser?._id || 'anon'}_${Date.now()}.${fileExt}`;
+            const filePath = `submissions/${fileName}`;
+
+            const { error: storageError } = await supabase.storage
+                .from('assignments')
+                .upload(filePath, file.buffer, {
+                    contentType: file.mimetype,
+                    upsert: false
+                });
+
+            if (storageError) {
+                console.error("Backend Supabase Error:", storageError);
+                throw new Error(`Cloud Storage Error: ${storageError.message}`);
+            }
+
+            const { data: { publicUrl } } = supabase.storage
+                .from('assignments')
+                .getPublicUrl(filePath);
+
+            final_url = publicUrl;
+
             if (file.mimetype === 'application/pdf') {
                 try {
                     const pdfString = file.buffer.toString('utf8', 0, 16384);
@@ -68,10 +97,7 @@ export const uploadFile = async (req: any, res: any) => {
                 }
             }
         } else if (cloudFileUrl) {
-            // NEW: Process Cloud URL (Supports up to 50MB+)
-            // Since the file is already on Supabase, we use a conservative default for impact
-            // In a pro version, we'd use a lambda to scan the file on Supabase
-            pageCount = req.body.page_count || 4; // Default to 4 pages if unknown
+            pageCount = req.body.page_count || 4; 
             console.log(`[Eco-Sync] Cloud file detected: ${cloudFileName}. Using estimated page count: ${pageCount}`);
         }
 
@@ -79,8 +105,6 @@ export const uploadFile = async (req: any, res: any) => {
         const plagiarism_score = Math.floor(Math.random() * 8) + 2;
 
         const submissionId = new mongoose.Types.ObjectId();
-        // Use cloud URL if provided, otherwise generate local download URL
-        const final_url = cloudFileUrl || `/api/submissions/download/${submissionId}`;
 
         await Submission.create({
             _id: submissionId,
@@ -113,7 +137,7 @@ export const uploadFile = async (req: any, res: any) => {
             message: 'Impact calculated and saved.',
             eco_update,
             plagiarism_score,
-            file_url: real_url
+            file_url: final_url
         });
 
     } catch (error: any) {
