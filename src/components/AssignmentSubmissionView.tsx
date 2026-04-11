@@ -189,7 +189,7 @@ export const AssignmentSubmissionView: React.FC<AssignmentSubmissionViewProps> =
                 });
 
             const timeoutPromise = new Promise((_, reject) => 
-                setTimeout(() => reject(new Error("Cloud Storage Timeout (45s). This means your CORS settings in Supabase are blocking the connection. Please follow the setup guide.")), 45000)
+                setTimeout(() => reject(new Error("Cloud Storage Timeout (5m). This means your CORS settings in Supabase are blocking the connection. Please follow the setup guide.")), 300000)
             );
 
             const { error: storageError } = await Promise.race([uploadPromise, timeoutPromise]) as any;
