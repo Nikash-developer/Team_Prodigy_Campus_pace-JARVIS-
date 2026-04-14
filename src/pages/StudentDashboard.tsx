@@ -1606,7 +1606,7 @@ export default function StudentDashboard() {
         alert(`Error submitting assignment: ${error.message}`);
       } finally {
         setIsSubmitting(false);
-      } }
+      }
     }
   };
 
