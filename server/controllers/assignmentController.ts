@@ -1,3 +1,6 @@
+// Campus Pace - Ultimate Force Update - 2026-04-11
+// Campus Pace - Global Synchronization & Stabilization Update - 2026-04-11
+// Campus Pace - Stable Upload & Sync Update - 2026-04-11
 import Assignment from '../models/Assignment';
 import Submission from '../models/Submission';
 
@@ -5,7 +8,7 @@ export const getAssignments = async (req: any, res: any) => {
     try {
         const { department } = req.query;
         const query = department ? { target_department: department } : {};
-        const assignments = await Assignment.find(query).sort({ createdAt: -1 }).lean();
+        const assignments = await (Assignment as any).find(query).sort({ createdAt: -1 }).lean();
         res.json(assignments);
     } catch (err: any) {
         res.status(500).json({ error: err.message });
@@ -29,7 +32,7 @@ export const createAssignment = async (req: any, res: any) => {
 
 export const updateAssignment = async (req: any, res: any) => {
     try {
-        const assignment = await Assignment.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        const assignment = await (Assignment as any).findByIdAndUpdate(req.params.id, req.body, { new: true });
         res.json(assignment);
     } catch (err: any) {
         res.status(500).json({ error: err.message });
@@ -38,7 +41,7 @@ export const updateAssignment = async (req: any, res: any) => {
 
 export const getSubmissions = async (req: any, res: any) => {
     try {
-        const submissions = await Submission.find({ assignment_id: req.params.id }).populate('student_id', 'name avatar').lean();
+        const submissions = await (Submission as any).find({ assignment_id: req.params.id }).populate('student_id', 'name avatar').lean();
         // Transform populate
         const transformed = submissions.map(s => ({
             ...s,
@@ -54,7 +57,7 @@ export const getSubmissions = async (req: any, res: any) => {
 export const gradeSubmission = async (req: any, res: any) => {
     try {
         const { grade, feedback } = req.body;
-        const sub = await Submission.findByIdAndUpdate(req.params.id, {
+        const sub = await (Submission as any).findByIdAndUpdate(req.params.id, {
             feedback_text: feedback,
             status: "Graded"
             // grade isn't strictly in schema right now but let's mock the update requirement

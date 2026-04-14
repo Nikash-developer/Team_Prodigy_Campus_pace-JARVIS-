@@ -1,3 +1,6 @@
+// Campus Pace - Ultimate Force Update - 2026-04-11
+// Campus Pace - Global Synchronization & Stabilization Update - 2026-04-11
+// Campus Pace - Stable Upload & Sync Update - 2026-04-11
 import Notice from '../models/Notice';
 
 export const getNotices = async (req: any, res: any) => {
@@ -34,7 +37,7 @@ export const createNotice = async (req: any, res: any) => {
 
 export const markRead = async (req: any, res: any) => {
     try {
-        const notice = await Notice.findByIdAndUpdate(
+        const notice = await (Notice as any).findByIdAndUpdate(
             req.params.id,
             { $addToSet: { read_receipts: req.user._id } },
             { new: true }
@@ -43,8 +46,8 @@ export const markRead = async (req: any, res: any) => {
         if (notice) {
             const io = req.app.get('io');
             if (io) io.emit('notice_engagement_update', {
-                noticeId: notice._id,
-                engagement: Math.min(100, notice.read_receipts.length * 10)
+                noticeId: (notice as any)._id,
+                engagement: Math.min(100, (notice as any).read_receipts.length * 10)
             });
         }
 

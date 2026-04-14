@@ -1,4 +1,4 @@
-// Quiz Generation Handler - v1.2 (Bypass Auth)
+// @ts-ignore
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import dotenv from 'dotenv';
 

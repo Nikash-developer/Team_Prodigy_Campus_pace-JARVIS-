@@ -1,3 +1,6 @@
+// Campus Pace - Ultimate Force Update - 2026-04-11
+// Campus Pace - Global Synchronization & Stabilization Update - 2026-04-11
+// Campus Pace - Stable Upload & Sync Update - 2026-04-11
 export interface User {
   id: string | number;
   email: string;
@@ -5,6 +8,13 @@ export interface User {
   name: string;
   department: string;
   avatar?: string;
+  eco_stats?: {
+    total_pages_saved: number;
+    total_water_saved: number;
+    total_co2_prevented: number;
+    total_trees_preserved: number;
+  };
+  eco_level?: number;
 }
 
 export interface Assignment {
@@ -47,4 +57,29 @@ export interface Notice {
   author_id: string | number;
   author_name?: string;
   image_url?: string;
+}
+
+export interface AttendanceMapping {
+  id: string;
+  faculty_id: string;
+  department: string;
+  year: string;
+  division: string;
+  subject_name: string;
+  total_lectures_planned: number;
+}
+
+export interface AttendanceAnalytics {
+  student_id: string;
+  mapping_id: string;
+  total_lectures_conducted: number;
+  lectures_attended: number;
+  attendance_percentage: number;
+  lectures_needed_for_75: number;
+  risk_level: 'excellent' | 'safe' | 'warning' | 'critical';
+  last_updated: string;
+  subject_class_mapping?: {
+    subject_name: string;
+    total_lectures_planned: number;
+  };
 }

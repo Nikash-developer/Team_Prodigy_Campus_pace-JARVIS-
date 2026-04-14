@@ -1,9 +1,11 @@
 {
+  "repoSync": "2026-04-11",
   "name": "Green-Sync – The Paperless Campus Initiative",
   "description": "A unified digital submission and smart notification hub for a multi-department college campus focused on sustainability.",
   "requestFramePermissions": [
     "camera",
     "microphone",
     "geolocation"
-  ]
+  ],
+  "refreshDate": "2026-04-11"
 }

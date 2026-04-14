@@ -1,9 +1,14 @@
+// Campus Pace - Ultimate Force Update - 2026-04-11
+// Campus Pace - Global Synchronization & Stabilization Update - 2026-04-11
+// Campus Pace - Stable Upload & Sync Update - 2026-04-11
 import mongoose from 'mongoose';
 
 const submissionSchema = new mongoose.Schema({
     student_id: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     assignment_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Assignment', required: true },
-    file_url: { type: String, required: true },
+    file_url: { type: String }, // Optional path for local dev
+    file_data: { type: Buffer }, // Persistent storage for Vercel
+    content_type: { type: String },
     page_count: { type: Number, default: 0 },
     plagiarism_score: { type: Number, default: 0 },
     grading_rubric_scores: { type: Map, of: Number },

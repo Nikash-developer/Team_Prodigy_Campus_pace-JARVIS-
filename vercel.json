@@ -1,17 +1,25 @@
 {
-    "version": 2,
-    "rewrites": [
-        {
-            "source": "/api/quiz/generate",
-            "destination": "/api/quiz/generate.ts"
-        },
-        {
-            "source": "/api/(.*)",
-            "destination": "/api/index.ts"
-        },
-        {
-            "source": "/(.*)",
-            "destination": "/index.html"
-        }
-    ]
+  "repoSync": "2026-04-11",
+  "version": 2,
+  "rewrites": [
+    {
+      "source": "/api/quiz/generate",
+      "destination": "/api/quiz/generate.ts"
+    },
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/index.ts"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ],
+  "functions": {
+    "api/index.ts": {
+      "includeFiles": "server/**",
+      "excludeFiles": "{node_modules/.cache/**,dist/**,uploads/**,Public/**}"
+    }
+  },
+  "refreshDate": "2026-04-11"
 }

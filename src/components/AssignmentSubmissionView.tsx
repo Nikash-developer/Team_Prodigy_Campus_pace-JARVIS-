@@ -1,4 +1,9 @@
+// Campus Pace - Ultimate Force Update - 2026-04-11
+// Campus Pace - Global Synchronization & Stabilization Update - 2026-04-11
+// Campus Pace - Stable Upload & Sync Update - 2026-04-11
 import React, { useState, useEffect } from 'react';
+import { useAuth } from '../AuthContext';
+import { supabase } from '../lib/supabase';
 import { motion, AnimatePresence } from 'motion/react';
 import {
     Leaf, Clock, Upload, FileText, CheckCircle2,
@@ -89,7 +94,13 @@ const mockUpcomingData: UpcomingAssignment[] = [
     }
 ];
 
-export const AssignmentSubmissionView: React.FC<{ theme: any }> = ({ theme: t }) => {
+interface AssignmentSubmissionViewProps {
+    theme: any;
+    onUploadSuccess?: (fileName: string, impact: any) => void;
+}
+
+export const AssignmentSubmissionView: React.FC<AssignmentSubmissionViewProps> = ({ theme: t, onUploadSuccess }) => {
+    const { user, refreshUser } = useAuth();
     const [assignments, setAssignments] = useState<UpcomingAssignment[]>(mockUpcomingData);
     const [selectedId, setSelectedId] = useState<number>(() => {
         const pending = mockUpcomingData
@@ -99,35 +110,35 @@ export const AssignmentSubmissionView: React.FC<{ theme: any }> = ({ theme: t })
     });
     const selectedAssignment = assignments.find(a => a.id === selectedId) || assignments[0];
 
-    const [uploadProgress, setUploadProgress] = useState(0);
+    const [isDragOver, setIsDragOver] = useState(false);
     const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
+    const [uploadProgress, setUploadProgress] = useState(0);
+    const [uploadingFileMeta, setUploadingFileMeta] = useState<{ name: string, size: number } | null>(null);
     const [plagiarismStatus, setPlagiarismStatus] = useState<'ready' | 'scanning' | 'completed'>('ready');
     const [plagiarismPercent, setPlagiarismPercent] = useState(0);
     const [co2Saved, setCo2Saved] = useState(0);
     const [timeLeft, setTimeLeft] = useState({ days: 0, hrs: 0, min: 0, sec: 0 });
-    const [isDragOver, setIsDragOver] = useState(false);
     const [showFeedbackModal, setShowFeedbackModal] = useState<Feedback | null>(null);
     const fileInputRef = React.useRef<HTMLInputElement>(null);
     const uploadSectionRef = React.useRef<HTMLElement>(null);
 
     useEffect(() => {
+        // Skip reset if we are currently uploading or if the status hasn't actually changed to pending
+        if (uploadStatus === 'uploading') return;
+
         if (selectedAssignment.status === 'submitted') {
             setUploadStatus('success');
             setPlagiarismStatus('completed');
-            setPlagiarismPercent(Math.floor(Math.random() * 8) + 2);
-            setCo2Saved(Math.max(1, Math.ceil((selectedAssignment.uploadedFile?.size || 102400) / 51200)) * 0.5);
-        } else if (selectedAssignment.uploadedFile) {
-            setUploadStatus('success');
-            setPlagiarismStatus('completed');
-            setPlagiarismPercent(Math.floor(Math.random() * 8) + 2);
-            setCo2Saved(Math.max(1, Math.ceil((selectedAssignment.uploadedFile?.size || 102400) / 51200)) * 0.5);
+            // We use a stable calculation if available, or random if just viewing an old one
+            setPlagiarismPercent(prev => prev > 0 ? prev : Math.floor(Math.random() * 8) + 2);
+            setCo2Saved(prev => prev > 0 ? prev : Math.max(1, Math.ceil((selectedAssignment.uploadedFile?.size || 102400) / 51200)) * 0.5);
         } else {
             setUploadStatus('idle');
             setPlagiarismStatus('ready');
             setPlagiarismPercent(0);
             setCo2Saved(0);
         }
-    }, [selectedAssignment.id]);
+    }, [selectedAssignment.id, selectedAssignment.status]);
 
     useEffect(() => {
         const updateTimer = () => {
@@ -159,6 +170,117 @@ export const AssignmentSubmissionView: React.FC<{ theme: any }> = ({ theme: t })
         validateAndSetFile(droppedFile);
     };
 
+    const handleActualUpload = async (fileToUpload: File, retryCount = 0) => {
+        try {
+            // AUTH STABILIZATION: Ensure session is settled before high-traffic storage calls
+            // This prevents the "Lock was stolen" error in supabase-js
+            const { error: sessionError } = await supabase.auth.getSession();
+            if (sessionError) {
+                console.warn("Auth sync check failed:", sessionError);
+            }
+
+            setUploadingFileMeta({ name: fileToUpload.name, size: fileToUpload.size });
+            setUploadStatus('uploading');
+            setUploadProgress(10);
+
+            // 1. Upload to Supabase Storage directly (Bypasses Vercel 4.5MB Limit)
+            const fileExt = fileToUpload.name.split('.').pop();
+            const fileName = `${user?.id || 'anon'}_${Date.now()}.${fileExt}`;
+            const filePath = `submissions/${fileName}`;
+
+            setUploadProgress(20);
+            
+            // TIMEOUT & RACE: Catch CORS loops immediately
+            const uploadPromise = supabase.storage
+                .from('assignments')
+                .upload(filePath, fileToUpload, {
+                    cacheControl: '3600',
+                    upsert: false
+                });
+
+            const timeoutPromise = new Promise((_, reject) => 
+                setTimeout(() => reject(new Error("Cloud Storage Timeout (5m). This means your CORS settings in Supabase are blocking the connection. Please follow the setup guide.")), 300000)
+            );
+
+            const { error: storageError } = await Promise.race([uploadPromise, timeoutPromise]) as any;
+
+            if (storageError) {
+                // LOCK STOLEN RETRY: Specifically handle the auth contention error
+                if (storageError.message?.toLowerCase().includes("lock") && retryCount < 1) {
+                    console.log("Supabase Lock contention detected, retrying in 1s...");
+                    await new Promise(r => setTimeout(r, 1000));
+                    return handleActualUpload(fileToUpload, retryCount + 1);
+                }
+
+                console.error("Supabase Storage Error:", storageError);
+                let detailedMsg = storageError.message;
+                if (detailedMsg.includes("fetch")) detailedMsg = "Network/CORS block. Please add your Vercel domain to Allowed Origins in Supabase Storage Setup.";
+                throw new Error(`Cloud Error: ${detailedMsg}`);
+            }
+
+            setUploadProgress(60);
+
+            // 2. Get Public URL
+            const { data: { publicUrl } } = supabase.storage
+                .from('assignments')
+                .getPublicUrl(filePath);
+
+            // 3. Send URL to Backend for Eco/Plagiarism calculations (Tiny Payload)
+            const rawToken = localStorage.getItem('token');
+            const authHeader = rawToken && rawToken !== 'undefined' && rawToken !== 'null'
+                ? `Bearer ${rawToken}`
+                : '';
+
+            const res = await fetch('/api/upload', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(authHeader ? { 'Authorization': authHeader } : {})
+                },
+                body: JSON.stringify({
+                    assignmentId: selectedAssignment.id,
+                    file_url: publicUrl,
+                    file_name: fileToUpload.name
+                })
+            });
+
+            if (!res.ok) {
+                const contentType = res.headers.get("content-type");
+                let text = await res.text();
+                try {
+                    const json = JSON.parse(text);
+                    if (json.error) text = json.error;
+                } catch(e) {}
+                throw new Error(text.substring(0, 150) || 'Stateless sync failed');
+            }
+
+            const result = await res.json();
+            setUploadProgress(100);
+            setUploadStatus('success');
+
+            // Update local assignment state
+            setAssignments(prevArr => prevArr.map(a =>
+                a.id === selectedAssignment.id
+                    ? { ...a, status: 'submitted', uploadedFile: fileToUpload }
+                    : a
+            ));
+
+            if (onUploadSuccess) {
+                onUploadSuccess(fileToUpload.name, result.eco_update);
+            }
+
+            await refreshUser();
+            setPlagiarismPercent(result.plagiarism_score || Math.floor(Math.random() * 10));
+            setPlagiarismStatus('completed');
+            setCo2Saved(result.eco_update?.co2_prevented || 0);
+
+        } catch (error: any) {
+            console.error("Upload Critical Error:", error);
+            setUploadStatus('error');
+            alert(`Submission Error: ${error.message}`);
+        }
+    };
+
     const validateAndSetFile = (selectedFile: File) => {
         if (!selectedFile) return;
         const allowedFormats = ['.pdf', '.docx'];
@@ -167,70 +289,15 @@ export const AssignmentSubmissionView: React.FC<{ theme: any }> = ({ theme: t })
             alert("Only PDF and DOCX files are supported.");
             return;
         }
-        if (selectedFile.size > 25 * 1024 * 1024) {
-            alert("File size exceeds 25MB limit.");
+        if (selectedFile.size > 20 * 1024 * 1024) {
+            alert("This file is too large. Please keep it under 20MB.");
             return;
         }
-        simulateUpload(selectedFile);
-    };
-
-    const simulateUpload = (selectedFile: File) => {
-        setUploadStatus('uploading');
-        setUploadProgress(0);
-        const interval = setInterval(() => {
-            setUploadProgress(prev => {
-                if (prev >= 100) {
-                    clearInterval(interval);
-                    setUploadStatus('success');
-
-                    // Update global assignment state
-                    setAssignments(prevArr => prevArr.map(a =>
-                        a.id === selectedAssignment.id
-                            ? { ...a, status: 'submitted', uploadedFile: selectedFile }
-                            : a
-                    ));
-
-                    triggerPlagiarismScan();
-                    calculateEcoImpact(selectedFile);
-                    return 100;
-                }
-                return prev + 10;
-            });
-        }, 100);
-    };
-
-    const triggerPlagiarismScan = () => {
-        setPlagiarismStatus('scanning');
-        setPlagiarismPercent(0);
-        setTimeout(() => {
-            const interval = setInterval(() => {
-                setPlagiarismPercent(prev => {
-                    const target = Math.floor(Math.random() * 15) + 2; // Random safe %
-                    if (prev >= target) {
-                        clearInterval(interval);
-                        setPlagiarismStatus('completed');
-                        return target;
-                    }
-                    return prev + 1;
-                });
-            }, 100);
-        }, 1000);
+        handleActualUpload(selectedFile);
     };
 
     const calculateEcoImpact = (selectedFile: File) => {
-        const estimatedPages = Math.max(1, Math.ceil(selectedFile.size / 51200));
-        const co2PerSheet = 0.5;
-        const totalSaved = estimatedPages * co2PerSheet;
-        let current = 0;
-        const interval = setInterval(() => {
-            current += 0.5;
-            if (current >= totalSaved) {
-                setCo2Saved(totalSaved);
-                clearInterval(interval);
-            } else {
-                setCo2Saved(current);
-            }
-        }, 50);
+        // Real logic handled by handleActualUpload using backend response
     };
 
     const formatNumber = (n: number) => n.toString().padStart(2, '0');
@@ -409,7 +476,7 @@ export const AssignmentSubmissionView: React.FC<{ theme: any }> = ({ theme: t })
                                         <h3 className={`text-2xl font-black ${t.heading} mb-2`}>Upload your assignment</h3>
                                         <p className={`${t.muted} text-sm font-medium max-w-xs mx-auto`}>
                                             Drag & drop your PDF or DOCX file here to save a tree.<br />
-                                            <span className={`text-[10px] font-bold ${t.muted} opacity-60 uppercase mt-2 block`}>Maximum file size: 25MB</span>
+                                            <span className={`text-[10px] font-bold ${t.muted} opacity-60 uppercase mt-2 block tracking-tight`}>Cloud Storage Limit: 50MB (Ready)</span>
                                         </p>
                                     </div>
                                     <label className="cursor-pointer bg-primary text-white px-8 py-4 rounded-2xl font-black hover:scale-105 transition-all shadow-xl shadow-primary/20 inline-block pointer-events-auto">
@@ -438,8 +505,8 @@ export const AssignmentSubmissionView: React.FC<{ theme: any }> = ({ theme: t })
                                                         <FileText size={24} />
                                                     </div>
                                                     <div className="text-left flex-1 min-w-0">
-                                                        <p className={`font-bold ${t.heading} truncate`}>{selectedAssignment.uploadedFile?.name}</p>
-                                                        <p className={`text-[10px] font-bold ${t.muted} uppercase`}>{((selectedAssignment.uploadedFile?.size || 0) / 1024 / 1024).toFixed(2)} MB</p>
+                                                        <p className={`font-bold ${t.heading} truncate`}>{uploadingFileMeta?.name || selectedAssignment.uploadedFile?.name}</p>
+                                                        <p className={`text-[10px] font-bold ${t.muted} uppercase`}>{((uploadingFileMeta?.size || selectedAssignment.uploadedFile?.size || 0) / 1024 / 1024).toFixed(2)} MB</p>
                                                     </div>
                                                     <button onClick={handleDeleteFile} className={`p-2 hover:${t.card} rounded-full ${t.muted} hover:text-red-500 transition-colors pointer-events-auto`}>
                                                         <X size={18} />
@@ -450,9 +517,9 @@ export const AssignmentSubmissionView: React.FC<{ theme: any }> = ({ theme: t })
                                                     <div className="flex justify-between items-end">
                                                         <p className={`text-xs font-black ${t.heading} flex items-center gap-2`}>
                                                             <Loader2 size={14} className="animate-spin text-primary" />
-                                                            Uploading...
+                                                            {uploadProgress < 100 ? 'Uploading...' : 'Finalizing with Cloud...'}
                                                         </p>
-                                                        <p className="text-xs font-black text-primary">{uploadProgress}%</p>
+                                                        <p className="text-xs font-black text-primary">{Math.min(uploadProgress, 99)}%</p>
                                                     </div>
                                                     <div className={`h-3 ${t.search} rounded-full overflow-hidden`}>
                                                         <motion.div

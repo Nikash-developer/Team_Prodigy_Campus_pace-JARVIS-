@@ -9,6 +9,7 @@ import cors from 'cors';
 // MongoDB setup
 import { connectDB } from './server/config/db';
 import { seedDB } from './server/seed';
+import { initCronJobs } from './server/utils/cronJobs';
 
 // Route imports
 import authRoutes from './server/routes/authRoutes';
@@ -19,6 +20,7 @@ import noticeRoutes from './server/routes/noticeRoutes';
 import chatbotRoutes from './server/routes/chatbotRoutes';
 import questionPaperRoutes from './server/routes/questionPaperRoutes';
 import quizRoutes from './server/routes/quizRoutes';
+import attendanceRoutes from './server/routes/attendanceRoutes';
 
 dotenv.config();
 
@@ -37,7 +39,8 @@ const dbMiddleware = async (req: any, res: any, next: any) => {
         const conn = await connectDB();
         if (!conn) {
             return res.status(503).json({
-                error: 'Database connection failed. Please check your MONGO_URI.'
+                error: 'Database connection failed. [ACTION REQUIRED]: Please add your MONGO_URI to the Vercel Environment Variables and redeploy.',
+                status: 'DB_UNCONFIGURED'
             });
         }
         next();
@@ -55,6 +58,7 @@ app.use('/api/notices', dbMiddleware, noticeRoutes);
 app.use('/api/chatbot', dbMiddleware, chatbotRoutes);
 app.use('/api/quiz', dbMiddleware, quizRoutes);
 app.use('/api', dbMiddleware, questionPaperRoutes);
+app.use('/api/attendance', dbMiddleware, attendanceRoutes);
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
 // --- VITE / STATIC SERVING ---
@@ -71,6 +75,7 @@ if (process.env.NODE_ENV !== "production") {
 
         await connectDB();
         await seedDB();
+        initCronJobs();
 
         console.log("Vite development server integration ready.");
     };
@@ -102,6 +107,9 @@ if (process.env.VERCEL !== "1") {
 
     server.listen(PORT as number, "0.0.0.0", () => {
         console.log(`Server running on http://localhost:${PORT}`);
+        if (process.env.NODE_ENV === "production") {
+             initCronJobs(); // Init here if it's production standalone
+        }
     });
 }
 

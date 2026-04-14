@@ -1,3 +1,6 @@
+// Campus Pace - Ultimate Force Update - 2026-04-11
+// Campus Pace - Global Synchronization & Stabilization Update - 2026-04-11
+// Campus Pace - Stable Upload & Sync Update - 2026-04-11
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -7,11 +10,15 @@ import {
   CheckCircle2, Clock, AlertCircle, ArrowLeft, ArrowRight,
   Edit3, MessageSquare, Scissors, Type, Maximize2,
   MoreVertical, Filter, SortDesc, Folder, ClipboardList, Droplets, User, X, Sparkles, Loader2,
-  ChevronLeft, Shield, Camera, Sun, Moon, HelpCircle
+  ChevronLeft, Shield, Camera, Sun, Moon, HelpCircle, Calendar
 } from 'lucide-react';
 import CountUp from 'react-countup';
 import { useAuth } from '../AuthContext';
 import FacultyNotices from './FacultyNotices';
+import { AttendanceMarker } from '../components/attendance/AttendanceMarker';
+import { DefaulterList } from '../components/attendance/DefaulterList';
+import { AttendanceMapping } from '../types';
+import { FacultyAttendancePage } from '../components/attendance/FacultyAttendancePage';
 
 const themes = {
   Light: {
@@ -80,6 +87,14 @@ export default function FacultyDashboard() {
   const [newAssignmentCourse, setNewAssignmentCourse] = useState("Env Science 101");
   const [assignmentFiles, setAssignmentFiles] = useState<File[]>([]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [attendanceMappings, setAttendanceMappings] = useState<any[]>([]);
+  const [selectedMapping, setSelectedMapping] = useState<any>(null);
+  const [markingStudents, setMarkingStudents] = useState<any[]>([]);
+  const [isMarkingLoading, setIsMarkingLoading] = useState(false);
+  const [markingTopic, setMarkingTopic] = useState('');
+  const [markingDate, setMarkingDate] = useState(new Date().toISOString().split('T')[0]);
+  const [defaulters, setDefaulters] = useState<any[]>([]);
+  const [activeAttendanceView, setActiveAttendanceView] = useState<'marking' | 'intelligence'>('marking');
 
   const [themeMode, setThemeMode] = useState<'Light' | 'Dark' | 'Eco'>('Light');
   const [facultyProfile, setFacultyProfile] = useState({
@@ -105,6 +120,20 @@ export default function FacultyDashboard() {
       document.documentElement.classList.remove('dark');
     }
   }, [themeMode]);
+
+  useEffect(() => {
+    const fetchMappings = async () => {
+      if (!user?.id) return;
+      try {
+        const response = await fetch(`/api/attendance/faculty/mappings/${user.id}`);
+        const data = await response.json();
+        setAttendanceMappings(data);
+      } catch (err) {
+        console.error("Failed to fetch mappings:", err);
+      }
+    };
+    fetchMappings();
+  }, [user?.id]);
 
   const t = themes[themeMode];
 
@@ -149,6 +178,101 @@ export default function FacultyDashboard() {
     document.execCommand(command, false);
     if (feedbackEditorRef.current) {
       setFeedback(feedbackEditorRef.current.innerHTML);
+    }
+  };
+
+  const handleStartMarking = async (mapping: any) => {
+    setSelectedMapping(mapping);
+    setIsMarkingLoading(true);
+    try {
+      // For now, mirroring the existing students list logic with id strings
+      const studentsInClass = [
+        { id: '1', name: "Alice Johnson", roll: "21CS01", status: 'present' },
+        { id: '2', name: "Bob Smith", roll: "21CS02", status: 'present' },
+        { id: '3', name: "Charlie Brown", roll: "21CS03", status: 'absent' },
+        { id: '4', name: "Diana Prince", roll: "21CS04", status: 'present' },
+        { id: '5', name: "Evan Wright", roll: "21CS05", status: 'present' }
+      ];
+      setMarkingStudents(studentsInClass);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsMarkingLoading(false);
+    }
+
+    // Fetch defaulters for this mapping
+    try {
+      const res = await fetch(`/api/attendance/defaulters/${mapping.id}`);
+      const data = await res.json();
+      setDefaulters(data);
+    } catch (err) {
+      console.error("Defaulter fetch failed", err);
+    }
+  };
+
+  const handleExportCSV = () => {
+    if (!defaulters.length) {
+      setToastMessage("No defaulters to export.");
+      return;
+    }
+    
+    const headers = ["Name,Email,Risk Level,Attendance Percentage,Lectures Needed"];
+    const rows = defaulters.map((d: any) => 
+      `${d.auth_users?.name || 'N/A'},${d.auth_users?.email || 'N/A'},${d.risk_level},${d.attendance_percentage.toFixed(1)}%,${d.lectures_needed_for_75}`
+    );
+    
+    const csvContent = "data:text/csv;charset=utf-8," + [headers, ...rows].join("\\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `defaulter_list_${selectedMapping?.subject_name || 'export'}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setToastMessage("CSV Exported successfully!");
+  };
+
+  const handleToggleStatus = (studentId: string) => {
+    setMarkingStudents(prev => prev.map(s => 
+      s.id === studentId 
+        ? { ...s, status: s.status === 'present' ? 'absent' : 'present' }
+        : s
+    ));
+  };
+
+  const handleSubmitAttendance = async () => {
+    if (!selectedMapping || !markingTopic) {
+      setToastMessage("Please provide subject and topic.");
+      return;
+    }
+
+    setIsMarkingLoading(true);
+    try {
+      const payload = {
+        mappingId: selectedMapping.id,
+        lectureDate: markingDate,
+        topic: markingTopic,
+        attendance: markingStudents.map(s => ({ studentId: s.id, status: s.status })),
+        facultyId: user?.id
+      };
+
+      const res = await fetch('/api/attendance/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (res.ok) {
+        setToastMessage("Attendance submitted successfully!");
+        setSelectedMapping(null);
+        setMarkingTopic('');
+      } else {
+        throw new Error("Submission failed");
+      }
+    } catch (err) {
+      setToastMessage("Error submitting attendance.");
+    } finally {
+      setIsMarkingLoading(false);
     }
   };
 
@@ -231,7 +355,7 @@ export default function FacultyDashboard() {
             <div className={`p-1.5 lg:p-2 ${t.accentBg} rounded-xl lg:rounded-2xl ${t.accent} shadow-sm transform group-hover:rotate-12 transition-transform`}>
               <Leaf size={24} fill="currentColor" className="lg:w-7 lg:h-7" />
             </div>
-            <span className={`text-lg lg:text-2xl font-black tracking-tight ${t.text} italic`}>Green-Sync</span>
+            <span className={`text-lg lg:text-2xl font-black tracking-tight ${t.text} italic`}>Campus pace</span>
           </div>
           <div className="relative flex-1 max-w-md hidden lg:block">
             <Search className={`absolute left-4 top-1/2 -translate-y-1/2 ${t.muted}`} size={18} />
@@ -244,7 +368,7 @@ export default function FacultyDashboard() {
           </div>
         </div>
         <nav className="hidden lg:flex items-center gap-8 relative mr-8">
-          {['Assignments', 'Notices', 'Students', 'Settings'].map(nav => (
+          {['Assignments', 'Notices', 'Students', 'Attendance', 'Settings'].map(nav => (
             <button
               key={nav}
               onClick={() => setActiveNav(nav)}
@@ -327,7 +451,7 @@ export default function FacultyDashboard() {
                   <div className={`p-2 ${t.accentBg} rounded-xl ${t.accent}`}>
                     <Leaf size={24} fill="currentColor" />
                   </div>
-                  <span className={`text-xl font-black italic ${t.heading}`}>Green-Sync</span>
+                  <span className={`text-xl font-black italic ${t.heading}`}>Campus pace</span>
                 </div>
                 <button
                   onClick={() => setIsMobileMenuOpen(false)}
@@ -342,6 +466,7 @@ export default function FacultyDashboard() {
                   { id: 'Assignments', label: 'Assignments', icon: <ClipboardList size={20} /> },
                   { id: 'Notices', label: 'Notices', icon: <Bell size={20} /> },
                   { id: 'Students', label: 'Student List', icon: <Users size={20} /> },
+                  { id: 'Attendance', label: 'Attendance', icon: <Calendar size={20} /> },
                   { id: 'Settings', label: 'Settings', icon: <Settings size={20} /> }
                 ].map((item) => (
                   <button
@@ -681,6 +806,8 @@ export default function FacultyDashboard() {
             >
               <StudentListView stats={stats} theme={t} themeMode={themeMode} />
             </motion.div>
+          ) : activeNav === 'Attendance' ? (
+            <FacultyAttendancePage user={user} theme={t} themeMode={themeMode} />
           ) : activeNav === 'Notices' ? (
             <motion.div
               key="notices"
@@ -1673,3 +1800,4 @@ function InteractiveRubricSlider({ label, val, max, onChange, theme: t }: { labe
     </div>
   );
 }
+

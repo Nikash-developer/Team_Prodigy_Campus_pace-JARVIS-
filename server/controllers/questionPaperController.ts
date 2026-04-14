@@ -1,3 +1,6 @@
+// Campus Pace - Ultimate Force Update - 2026-04-11
+// Campus Pace - Global Synchronization & Stabilization Update - 2026-04-11
+// Campus Pace - Stable Upload & Sync Update - 2026-04-11
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
@@ -45,7 +48,7 @@ export const uploadPaper = async (req: any, res: any) => {
 
 export const downloadPaper = async (req: any, res: any) => {
     try {
-        const paper = await QuestionPaper.findById(req.params.id);
+        const paper = await (QuestionPaper as any).findById(req.params.id);
         if (!paper || !paper.fileData) {
             return res.status(404).json({ error: 'File not found' });
         }

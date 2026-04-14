@@ -1,3 +1,6 @@
+// Campus Pace - Ultimate Force Update - 2026-04-11
+// Campus Pace - Global Synchronization & Stabilization Update - 2026-04-11
+// Campus Pace - Stable Upload & Sync Update - 2026-04-11
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -31,6 +34,17 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
   const { login } = useAuth();
+  const [configError, setConfigError] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    // Check for critical frontend environment variables
+    const url = import.meta.env.VITE_SUPABASE_URL;
+    const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
+    
+    if (!url || !key || url.includes('YOUR_') || key.includes('YOUR_')) {
+      setConfigError('Supabase credentials missing. Sign-in features will not work until you add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to your Vercel Environment Variables.');
+    }
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -47,49 +61,64 @@ export default function LoginPage() {
 
         if (authError) throw authError;
 
-        const supabaseUser = data.user!;
+        const user = data.user;
+        if (!user) throw new Error('No user data returned');
 
-        // Fetch profile from Supabase
-        const { data: profile } = await supabase
-          .from('profiles')
+        // Fetch user data from Supabase Table
+        const { data: userData, error: dbError } = await supabase
+          .from('users')
           .select('*')
-          .eq('id', supabaseUser.id)
+          .eq('id', user.id)
           .single();
 
-        if (profile) {
+        if (userData && !dbError) {
           login({
-            id: supabaseUser.id,
-            email: supabaseUser.email || '',
-            name: profile.name || 'User',
-            role: profile.role || 'student',
-            department: profile.department || '',
-            avatar: profile.avatar
+            id: user.id,
+            email: user.email || '',
+            name: userData.name || 'User',
+            role: userData.role || 'student',
+            department: userData.department || '',
+            avatar: userData.avatar
           } as any);
 
-          if (profile.role === 'student') navigate('/student');
-          else if (profile.role === 'admin') navigate('/admin');
+          if (userData.role === 'student') navigate('/student');
+          else if (userData.role === 'admin') navigate('/admin');
           else navigate('/faculty');
         } else {
-          navigate('/student');
+          const fallbackRole = user.user_metadata?.role || 'student';
+          if (fallbackRole === 'admin') navigate('/admin');
+          else if (fallbackRole === 'faculty' || fallbackRole === 'hod') navigate('/faculty');
+          else navigate('/student');
         }
-
       } else if (view === 'forgot-password') {
-        const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
-          redirectTo: `${window.location.origin}/reset-password`
-        });
+        const { error: resetError } = await supabase.auth.resetPasswordForEmail(email);
         if (resetError) throw resetError;
         setSuccess('Password reset link sent to your email!');
-
       } else {
-        // Sign up
+        const { data, error: signUpError } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: {
+              full_name: fullName,
+              role: role
+            }
+          }
+        });
+
+        if (signUpError) throw signUpError;
+        const user = data.user;
+        if (!user) throw new Error('Signup failed');
+
         const profileData = {
+          id: user.id,
           name: fullName,
           email: email,
           role: role,
-          idNumber: idNumber,
+          id_number: idNumber,
           department: department,
           designation: designation || '',
-          createdAt: new Date().toISOString(),
+          created_at: new Date().toISOString(),
           eco_stats: {
             total_pages_saved: 0,
             total_water_saved: 0,
@@ -97,29 +126,14 @@ export default function LoginPage() {
           }
         };
 
-        const { data, error: signUpError } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            data: {
-              full_name: fullName,
-              role: role,
-              department: department
-            }
-          }
-        });
+        // Create profile in Supabase Table
+        const { error: insertError } = await supabase
+          .from('users')
+          .insert([profileData]);
 
-        if (signUpError) throw signUpError;
+        if (insertError) throw insertError;
 
-        const supabaseUser = data.user!;
-
-        // Insert profile into 'profiles' table
-        await supabase.from('profiles').upsert({
-          id: supabaseUser.id,
-          ...profileData
-        });
-
-        setSuccess(`Registration successful! Welcome to Green-Sync.`);
+        setSuccess(`Registration successful! Welcome to Campus pace.`);
         setTimeout(() => {
           if (role === 'student') navigate('/student');
           else navigate('/faculty');
@@ -127,16 +141,7 @@ export default function LoginPage() {
       }
     } catch (err: any) {
       console.error('Auth error:', err);
-      let msg = 'Authentication failed. Please try again.';
-      if (err.message?.includes('Invalid login credentials') || err.message?.includes('invalid_credentials')) {
-        msg = 'Invalid email or password.';
-      } else if (err.message?.includes('User already registered') || err.message?.includes('already registered')) {
-        msg = 'This email is already registered.';
-      } else if (err.message?.includes('Network') || err.message?.includes('fetch')) {
-        msg = 'Network error. Please check your connection.';
-      } else if (err.message) {
-        msg = err.message;
-      }
+      let msg = err.message || 'Authentication failed. Please try again.';
       setError(msg);
     } finally {
       setIsLoading(false);
@@ -148,30 +153,27 @@ export default function LoginPage() {
     setError('');
 
     try {
-      const { error: oauthError } = await supabase.auth.signInWithOAuth({
+      // Save the selected role before changing pages!
+      localStorage.setItem('pending_role', role);
+      
+      const { data, error: socialError } = await supabase.auth.signInWithOAuth({
         provider: providerType,
         options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
+          redirectTo: window.location.origin + '/dashboard',
           queryParams: {
-            // pass role as hint (stored in metadata after sign-in via callback)
+            prompt: 'select_account',
           }
         }
       });
 
-      if (oauthError) throw oauthError;
-      // OAuth will redirect the user, so no navigation needed here
+      if (socialError) throw socialError;
+      
+      // Note: Supabase OAuth redirects. Profile creation should happen in a trigger or after redirect in AuthContext.
+      // For this demo, we assume redirect happens.
 
     } catch (err: any) {
       console.error('Social Login Error:', err);
-      let msg = 'Social login failed. Please try again.';
-      if (err.message?.includes('provider is not enabled')) {
-        msg = 'This sign-in provider is not enabled. Please check Supabase Auth settings.';
-      } else if (err.message?.includes('cancelled') || err.message?.includes('closed')) {
-        msg = 'Login was cancelled. Please try again.';
-      } else if (err.message) {
-        msg = err.message;
-      }
-      setError(msg);
+      setError(err.message || 'Social login failed. Please try again.');
       setIsLoading(false);
     }
   };
@@ -220,7 +222,7 @@ export default function LoginPage() {
             <div className="p-2 bg-primary/10 rounded-xl text-primary transform group-hover:rotate-12 transition-transform">
               <Leaf size={32} fill="currentColor" />
             </div>
-            <span className="text-2xl font-black tracking-tight text-slate-900 italic">Green-Sync</span>
+            <span className="text-2xl font-black tracking-tight text-slate-900 italic">Campus pace</span>
           </div>
 
           <AnimatePresence mode="wait">
@@ -241,7 +243,7 @@ export default function LoginPage() {
                     ? 'Enter your campus credentials to access your sustainable dashboard.'
                     : view === 'forgot-password'
                       ? 'Enter your registered email to receive a password recovery link.'
-                      : 'Provide your details to set up your new Green-Sync account instantly.'}
+                      : 'Provide your details to set up your new Campus pace account instantly.'}
                 </p>
               </div>
 
@@ -252,7 +254,7 @@ export default function LoginPage() {
                     onClick={() => handleSocialSignIn('google')}
                     className="flex items-center justify-center gap-3 py-3 px-4 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-all font-bold text-sm text-slate-700 shadow-sm group"
                   >
-                    <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="w-5 h-5" />
+                    <img src="https://cdn.cdnlogo.com/logos/g/35/google-icon.svg" alt="Google" className="w-5 h-5" />
                     Google
                   </button>
                   <button
@@ -270,6 +272,36 @@ export default function LoginPage() {
                 <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-100"></div></div>
                 <span className="relative px-4 bg-white">or use email</span>
               </div>
+
+              {configError && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="mb-8 p-6 bg-amber-50 border-2 border-amber-200 rounded-[2rem] text-amber-800 shadow-xl shadow-amber-500/5 relative overflow-hidden"
+                >
+                  <div className="absolute top-0 right-0 p-4 opacity-10">
+                    <ShieldCheck size={40} />
+                  </div>
+                  <div className="flex items-start gap-4 relative z-10">
+                    <div className="p-3 bg-amber-200/50 rounded-2xl text-amber-700">
+                      <AlertCircle size={24} />
+                    </div>
+                    <div>
+                      <h4 className="font-black text-sm uppercase tracking-wider mb-1">Configuration Warning</h4>
+                      <p className="text-xs font-bold leading-relaxed opacity-90">
+                        {configError}
+                      </p>
+                      <a 
+                        href="/Deployment_Setup_Guide.md" 
+                        target="_blank"
+                        className="inline-block mt-3 text-xs font-black text-amber-700 underline decoration-2 underline-offset-4 hover:text-amber-900 transition-colors"
+                      >
+                        Read Setup Guide →
+                      </a>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
 
               {error && (
                 <motion.div
@@ -569,6 +601,9 @@ export default function LoginPage() {
 
           <div className="absolute top-10 right-10 w-32 h-32 bg-primary/10 rounded-full blur-3xl" />
           <div className="absolute bottom-10 left-10 w-48 h-48 bg-primary/5 rounded-full blur-3xl" />
+          <div className="absolute bottom-4 right-6 text-[9px] font-black text-slate-500/30 uppercase tracking-[0.3em] select-none pointer-events-none">
+            v1.5.0-DeploymentFix
+          </div>
         </div>
       </motion.div>
     </div>

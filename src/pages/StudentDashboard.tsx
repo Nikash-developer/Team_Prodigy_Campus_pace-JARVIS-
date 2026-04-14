@@ -1,3 +1,7 @@
+// Campus Pace - Ultimate Force Update - 2026-04-11
+// Campus Pace - Global Synchronization & Stabilization Update - 2026-04-11
+// Campus Pace - Stable Upload & Sync Update - 2026-04-11
+import { StudentAttendancePage } from '../components/attendance/StudentAttendancePage';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -21,8 +25,12 @@ import { Notice, Assignment } from '../types';
 
 import { AssignmentSubmissionView } from '../components/AssignmentSubmissionView';
 import { allQuestionPapers } from '../lib/mockPapers';
+import { supabase } from '../lib/supabase';
+import { WhatIfSimulator } from '../components/attendance/WhatIfSimulator';
+import { PredictiveWarning } from '../components/attendance/PredictiveWarning';
+import { AttendanceAnalytics } from '../types';
 
-type Tab = 'dashboard' | 'courses' | 'eco-tracker' | 'settings' | 'papers' | 'notes' | 'assignment-submission';
+type Tab = 'dashboard' | 'courses' | 'eco-tracker' | 'settings' | 'papers' | 'notes' | 'assignment-submission' | 'attendance';
 
 interface Note {
   id: number;
@@ -127,21 +135,27 @@ const themes = {
 // Sub-components
 const StatCard: React.FC<{ icon: React.ReactNode, label: string, value: string | number, trend: string, color: string, isNumeric?: boolean, theme: any }> = ({ icon, label, value, trend, color, isNumeric, theme: t }) => (
   <motion.div
-    whileHover={{ y: -5 }}
-    className={`${t.card} p-5 lg:p-8 rounded-2xl lg:rounded-[2rem] shadow-sm border ${t.border} flex flex-col justify-between group transition-all duration-500 hover:shadow-xl hover:shadow-slate-200/50`}
+    whileHover={{ 
+      y: -12, 
+      scale: 1.02,
+      transition: { type: "spring", stiffness: 300, damping: 15 }
+    }}
+    className={`${t.card} p-5 lg:p-8 rounded-2xl lg:rounded-[2.5rem] shadow-sm border ${t.border} flex flex-col justify-between group transition-all duration-500 hover:shadow-2xl hover:shadow-primary/10 relative overflow-hidden`}
   >
-    <div className="flex justify-between items-start mb-6">
-      <div className={`${t.accentBg} ${t.accent} p-3 rounded-2xl group-hover:scale-110 transition-transform`}>
+    <div className="absolute top-0 right-0 w-24 h-24 bg-primary/5 rounded-full -translate-y-12 translate-x-12 blur-2xl group-hover:bg-primary/10 transition-colors" />
+    <div className="flex justify-between items-start mb-6 relative z-10">
+      <div className={`${t.accentBg} ${t.accent} p-4 rounded-[1.25rem] group-hover:rotate-6 transition-transform shadow-sm`}>
         {icon}
       </div>
-      <div className={`flex items-center gap-1 ${trend.startsWith('+') ? 'text-green-500' : 'text-slate-400'} text-xs font-black`}>
+      <div className={`flex items-center gap-1.5 ${trend.startsWith('+') ? 'text-green-500' : 'text-slate-400'} text-[10px] font-black uppercase tracking-wider`}>
+        <ArrowUpRight size={12} className={trend.startsWith('+') ? 'rotate-0' : 'rotate-90'} />
         {trend}
       </div>
     </div>
-    <div>
-      <p className={`text-[10px] lg:text-xs font-black ${t.muted} uppercase tracking-widest mb-1`}>{label}</p>
+    <div className="relative z-10">
+      <p className={`text-[10px] lg:text-xs font-black ${t.muted} uppercase tracking-[0.2em] mb-2`}>{label}</p>
       <div className={`text-2xl lg:text-4xl font-black ${t.heading} tracking-tight`}>
-        {isNumeric ? <CountUp end={Number(value)} duration={2} /> : value}
+        {isNumeric ? <CountUp end={Number(value.toString().replace(/[^0-9.]/g, ''))} duration={2} decimals={value.toString().includes('.') ? 2 : 0} /> : value}
       </div>
     </div>
   </motion.div>
@@ -509,7 +523,7 @@ const ReminderModal: React.FC<{ onClose: () => void, onSet: (time: string) => vo
 
 const AIAssistant: React.FC<{ onClose: () => void, theme: any }> = ({ onClose, theme: t }) => {
   const [messages, setMessages] = useState<{ role: 'user' | 'ai', text: string }[]>([
-    { role: 'ai', text: "Hi there! I'm your Green-Sync assistant. I can help you find courses, check your eco-impact, or find question papers. How can I help you today?" }
+    { role: 'ai', text: "Hi there! I'm your Campus pace assistant. I can help you find courses, check your eco-impact, or find question papers. How can I help you today?" }
   ]);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
@@ -562,7 +576,7 @@ const AIAssistant: React.FC<{ onClose: () => void, theme: any }> = ({ onClose, t
               <Sparkles size={20} />
             </div>
             <div>
-              <h3 className="font-black text-sm">Green-Sync AI</h3>
+              <h3 className="font-black text-sm">Campus pace AI</h3>
               <p className="text-[10px] font-bold opacity-80 uppercase tracking-widest">Always Online</p>
             </div>
           </div>
@@ -871,8 +885,16 @@ const SettingsOption: React.FC<{
 );
 
 export default function StudentDashboard() {
-  const { user, logout } = useAuth();
+  const { user, logout, refreshUser } = useAuth();
+  const [recentEcoHistory, setRecentEcoHistory] = useState<any[]>(() => {
+    const saved = localStorage.getItem('recent_eco_history');
+    return saved ? JSON.parse(saved) : [];
+  });
+
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
+  const [attendanceSummary, setAttendanceSummary] = useState<any>(null);
+  const [isAttendanceLoading, setIsAttendanceLoading] = useState(false);
+  const [simulatedMisses, setSimulatedMisses] = useState<Record<string, number>>({});
   const [notices, setNotices] = useState<Notice[]>([]);
   const [impact, setImpact] = useState({ total_pages: 1240 });
   const [showAllNotices, setShowAllNotices] = useState(false);
@@ -971,7 +993,7 @@ export default function StudentDashboard() {
   const [showAssistant, setShowAssistant] = useState(false);
   const [isAssistantTyping, setIsAssistantTyping] = useState(false);
   const [assistantMessages, setAssistantMessages] = useState([
-    { role: 'assistant', text: "Hello! I'm your Green-Sync AI assistant. How can I help you save paper and master your courses today?" }
+    { role: 'assistant', text: "Hello! I'm your Campus pace AI assistant. How can I help you save paper and master your courses today?" }
   ]);
   const [assistantInput, setAssistantInput] = useState('');
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -1001,7 +1023,7 @@ export default function StudentDashboard() {
       } else if (lower.includes('notic')) {
         response = "Check the notifications bell in the header! You can mark them all as read once you've seen them.";
       } else {
-        response = "That's a great question! I'm constantly learning from Green-Sync data. Is there anything specific about your assignments or Mumbai papers I can help with?";
+        response = "That's a great question! I'm constantly learning from Campus pace data. Is there anything specific about your assignments or Mumbai papers I can help with?";
       }
 
       setAssistantMessages(prev => [...prev, { role: 'assistant', text: response }]);
@@ -1031,7 +1053,7 @@ export default function StudentDashboard() {
 
   const [studentProfile, setStudentProfile] = useState({
     name: user?.name || 'Nikash Developer',
-    email: user?.email || 'student@greensync.edu',
+    email: user?.email || 'student@campuspace.edu',
     phone: '+91 98765 43210',
     dept: 'Computer Engineering',
     year: 'TE-Sem 6',
@@ -1163,6 +1185,23 @@ export default function StudentDashboard() {
     }
   }, [themeMode]);
 
+  useEffect(() => {
+    const fetchAttendance = async () => {
+      if (!user?.id) return;
+      setIsAttendanceLoading(true);
+      try {
+        const response = await fetch(`/api/attendance/student/summary/${user.id}`);
+        const data = await response.json();
+        setAttendanceSummary(data);
+      } catch (err) {
+        console.error("Failed to fetch attendance summary:", err);
+      } finally {
+        setIsAttendanceLoading(false);
+      }
+    };
+    fetchAttendance();
+  }, [user?.id]);
+
   const t = themes[themeMode];
 
   useEffect(() => {
@@ -1230,7 +1269,7 @@ export default function StudentDashboard() {
       {
         id: 5,
         title: 'Hackathon Registration Open!',
-        content: 'Green-Sync Dev Hack is now accepting registrations. Build sustainable solutions and win eco-friendly prizes.',
+        content: 'Campus pace Dev Hack is now accepting registrations. Build sustainable solutions and win eco-friendly prizes.',
         publish_date: new Date(Date.now() - 240 * 60000).toISOString(),
         is_emergency: false,
         target_department: 'CS',
@@ -1381,43 +1420,165 @@ export default function StudentDashboard() {
     fetchPapers();
   }, []);
 
-  const handleAssignmentAction = (id: number, action: 'submit' | 'start') => {
-    setAssignments(prev => prev.map(a => {
-      if (a.id === id) {
-        if (action === 'start') {
+  const handleAssignmentAction = async (id: number, action: 'submit' | 'start') => {
+    if (action === 'start') {
+      setAssignments(prev => prev.map(a => {
+        if (a.id === id) {
           setActiveAssignmentId(id);
           const deadlineDate = new Date(a.deadline).getTime();
           const now = Date.now();
           const diffInSeconds = Math.max(0, Math.floor((deadlineDate - now) / 1000));
           setTimeLeft(diffInSeconds);
+          return { ...a, status: 'in-progress' };
         }
-        if (action === 'submit' && a.id === 1 && !a.uploadedFile) {
-          alert('Please upload a PDF file before submitting.');
-          return a;
-        }
-        return { ...a, status: action === 'submit' ? 'submitted' : 'in-progress' };
-      }
-      return a;
-    }));
+        return a;
+      }));
+      return;
+    }
 
     if (action === 'submit') {
       const assignment = assignments.find(a => a.id === id);
-      if (id === 1 && !assignment?.uploadedFile) return;
+      if (!assignment?.uploadedFile) {
+        alert('Please upload a PDF file before submitting.');
+        return;
+      }
 
-      setSubmissionCount(prev => prev + 1);
+      if (assignment.uploadedFile.size > 20 * 1024 * 1024) {
+        alert("This file is too large. Please keep it under 20MB.");
+        return;
+      }
 
-      // Eco Confetti
-      confetti({
-        particleCount: 80,
-        spread: 70,
-        origin: { y: 0.6 },
-        colors: ['#22C55E', '#16A34A', '#86EFAC', '#4ADE80'],
-        shapes: ['circle', 'square']
-      });
+      try {
+        // 1. Prepare Multipart Form Data for Server-Side Upload
+        const formData = new FormData();
+        formData.append('file', assignment.uploadedFile);
+        formData.append('assignmentId', id.toString());
+        formData.append('student_email', user?.email || '');
+                formData.append('student_name', user?.name || '');
 
-      // alert(`Successfully submitted the assignment!`);
-    } else {
-      // alert(`Successfully started the assignment!`);
+        // 2. Perform Direct-to-Cloud Upload
+        const fileExt = assignment.uploadedFile.name.split('.').pop();
+        const fileName = `${user?.id || 'anon'}_${Date.now()}.${fileExt}`;
+        const filePath = `submissions/${fileName}`;
+
+        const uploadPromise = supabase.storage
+          .from('assignments')
+          .upload(filePath, assignment.uploadedFile, {
+            cacheControl: '3600',
+            upsert: false
+          });
+
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error("Cloud Storage Timeout (5m). This often means your CORS settings in Supabase are blocking the connection. Please follow the setup guide.")), 300000)
+        );
+
+        const { error: storageError } = await Promise.race([uploadPromise, timeoutPromise]) as any;
+
+        if (storageError) {
+          // LOCK STOLEN RETRY
+          if (storageError.message?.toLowerCase().includes("lock")) {
+            console.log("Dashboard lock contention, retrying in 1s...");
+            await new Promise(r => setTimeout(r, 1000));
+            return handleAssignmentAction(id, action);
+          }
+
+          console.error("Supabase Storage Error:", storageError);
+          let detailedMsg = storageError.message;
+          if (detailedMsg.includes("fetch")) detailedMsg = "Network/CORS block. Please add your Vercel domain to Allowed Origins in Supabase Storage Setup.";
+          throw new Error(`Cloud Error: ${detailedMsg}`);
+        }
+
+        // 2. Get Public URL
+        const { data: { publicUrl } } = supabase.storage
+          .from('assignments')
+          .getPublicUrl(filePath);
+
+        // 3. Send URL to Backend
+        const rawToken = localStorage.getItem('token');
+        const authHeader = rawToken && rawToken !== 'undefined' && rawToken !== 'null'
+          ? `Bearer ${rawToken}`
+          : '';
+
+        // 2. Single POST call to backend: Handles both Storage upload and Database record
+        const res = await fetch('/api/upload', {
+          method: 'POST',
+          headers: {
+
+            ...(authHeader ? { 'Authorization': authHeader } : {})
+          },
+          body: formData
+        });
+
+
+
+
+
+
+        if (res.ok) {
+          // ULTIMATE JSON SHIELD: Catching errors even on successful HTTP status
+          let result;
+          try {
+            result = await res.json();
+          } catch (jsonErr) {
+            console.error("Dashboard Success JSON Parse Error:", jsonErr);
+            throw new Error("Server confirmed upload but sent an invalid response. Refresh to see your status.");
+          }
+          
+          // Parallel update of Eco History
+          const newEntry = {
+            id: Date.now(),
+            fileName: assignment.uploadedFile.name,
+            impact: result.eco_update,
+            timestamp: new Date().toISOString()
+          };
+          
+          setRecentEcoHistory(prev => {
+            const updatedHistory = [newEntry, ...prev].slice(0, 10);
+            localStorage.setItem('recent_eco_history', JSON.stringify(updatedHistory));
+            return updatedHistory;
+          });
+
+          // Sync with Supabase Auth
+          await refreshUser();
+          
+          setAssignments(prev => prev.map(a => 
+            a.id === id ? { ...a, status: 'submitted' } : a
+          ));
+
+          setSubmissionCount(prev => prev + 1);
+
+          // Eco Confetti
+          confetti({
+            particleCount: 100,
+            spread: 80,
+            origin: { y: 0.6 },
+            colors: ['#22C55E', '#16A34A', '#86EFAC', '#4ADE80'],
+            shapes: ['circle', 'square']
+          });
+
+          // Tip: In a real app, we'd trigger a profile refresh here to show updated eco_stats
+          // For now, we'll suggest the user that their impact has been recorded
+          console.log("Assignment uploaded and eco-impact recorded:", result.eco_impact);
+        } else {
+          if (res.status === 413) {
+            throw new Error('File is too large for the current hosting plan (Vercel Limit). Works locally up to 40MB.');
+          }
+          
+          let errorData;
+          const contentType = res.headers.get("content-type");
+          if (contentType && contentType.includes("application/json")) {
+            errorData = await res.json();
+          } else {
+            console.warn("Non-JSON error in dashboard:", await res.text());
+            errorData = { error: 'Server returned a non-JSON error. The file might be too large or the server timed out.' };
+          }
+          
+          alert(`Submission failed: ${errorData.error || 'Server error'}`);
+        }
+      } catch (error: any) {
+        console.error("Submission error:", error);
+        alert(`Error submitting assignment: ${error.message}`);
+      }
     }
   };
 
@@ -1603,7 +1764,7 @@ export default function StudentDashboard() {
             <div className="bg-primary p-2 rounded-lg lg:p-2.5 lg:rounded-2xl shadow-lg transform group-hover:rotate-12 transition-transform">
               <Leaf size={20} className="text-white lg:w-7 lg:h-7" />
             </div>
-            <span className={`text-lg lg:text-2xl font-black tracking-tight ${t.heading} italic transition-colors`}>Green-Sync</span>
+            <span className={`text-lg lg:text-2xl font-black tracking-tight ${t.heading} italic transition-colors`}>Campus pace</span>
           </div>
 
           <div className="relative w-64 xl:w-80 hidden lg:block">
@@ -1619,7 +1780,7 @@ export default function StudentDashboard() {
         </div>
 
         <nav className="hidden lg:flex items-center gap-6 xl:gap-8">
-          {['dashboard', 'courses', 'papers', 'notes', 'assignment-submission', 'eco-tracker', 'settings'].map((tab) => {
+          {['dashboard', 'courses', 'papers', 'notes', 'assignment-submission', 'eco-tracker', 'attendance', 'settings'].map((tab) => {
             const labels: Record<string, string> = {
               'dashboard': 'Dashboard',
               'courses': 'Courses',
@@ -1627,6 +1788,7 @@ export default function StudentDashboard() {
               'notes': 'Notes',
               'assignment-submission': 'Assignments',
               'eco-tracker': 'Eco Tracker',
+              'attendance': 'Attendance',
               'settings': 'Settings'
             };
             return (
@@ -1734,7 +1896,7 @@ export default function StudentDashboard() {
                   <div className="bg-primary p-2.5 rounded-2xl shadow-lg shadow-primary/20">
                     <Leaf size={24} className="text-white" />
                   </div>
-                  <span className={`text-2xl font-black italic tracking-tight ${t.heading}`}>Green-Sync</span>
+                  <span className={`text-2xl font-black italic tracking-tight ${t.heading}`}>Campus pace</span>
                 </div>
                 <button
                   onClick={() => setIsMobileMenuOpen(false)}
@@ -1750,8 +1912,9 @@ export default function StudentDashboard() {
                   { id: 'courses', label: 'My Courses', icon: <BookOpen size={20} /> },
                   { id: 'papers', label: 'Question Papers', icon: <FileQuestion size={20} /> },
                   { id: 'notes', label: 'Student Notes', icon: <FileText size={20} /> },
-                  { id: 'assignment-submission', label: 'Assignments', icon: <Upload size={20} /> },
+                   { id: 'assignment-submission', label: 'Assignments', icon: <Upload size={20} /> },
                   { id: 'eco-tracker', label: 'Eco Tracker', icon: <TreePine size={20} /> },
+                  { id: 'attendance', label: 'Attendance', icon: <ShieldAlert size={20} /> },
                   { id: 'settings', label: 'Settings', icon: <Settings size={20} /> }
                 ].map((item) => (
                   <button
@@ -1794,6 +1957,10 @@ export default function StudentDashboard() {
 
       <main className="max-w-7xl mx-auto p-4 lg:p-8">
         <AnimatePresence mode="wait">
+          {activeTab === 'attendance' && (
+            <StudentAttendancePage user={{ ...user, ...studentProfile }} theme={t} attendanceSummary={attendanceSummary} />
+          )}
+
           {activeTab === 'dashboard' && (
             <motion.div
               key="dashboard"
@@ -1950,7 +2117,32 @@ export default function StudentDashboard() {
               exit={{ opacity: 0, x: -20 }}
               transition={{ duration: 0.4 }}
             >
-              <AssignmentSubmissionView theme={t} />
+              <AssignmentSubmissionView 
+                theme={t} 
+                onUploadSuccess={(fileName, impact) => {
+                  const newEntry = {
+                    id: Date.now(),
+                    fileName,
+                    impact,
+                    timestamp: new Date().toISOString()
+                  };
+                  setRecentEcoHistory(prev => {
+                    const updated = [newEntry, ...prev].slice(0, 10);
+                    localStorage.setItem('recent_eco_history', JSON.stringify(updated));
+                    return updated;
+                  });
+                  
+                  // Trigger Confetti Celebration for Eco Impact
+                  import('canvas-confetti').then(confetti => {
+                    confetti.default({
+                      particleCount: 150,
+                      spread: 80,
+                      origin: { y: 0.6 },
+                      colors: ['#2B8A3E', '#40C057', '#37B24D', '#22C55E']
+                    });
+                  });
+                }}
+              />
             </motion.div>
           )}
 
@@ -2024,8 +2216,12 @@ export default function StudentDashboard() {
               <h1 className={`text-3xl font-black ${t.heading}`}>Eco-Impact Analysis</h1>
 
               {/* Weekly Goal Area */}
-              <div className={`${t.card} p-8 rounded-[3rem] shadow-sm border ${t.border} flex flex-col md:flex-row items-center gap-12 relative overflow-hidden group transition-all duration-500`}>
-                <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full -translate-y-1/2 translate-x-1/2 -z-10 blur-3xl group-hover:bg-primary/10 transition-colors" />
+              <motion.div 
+                whileHover={{ scale: 1.01, translateY: -4 }}
+                className={`${t.card} p-8 rounded-[3rem] shadow-sm border ${t.border} flex flex-col md:flex-row items-center gap-12 relative overflow-hidden group transition-all duration-500 hover:shadow-2xl hover:shadow-primary/5`}
+              >
+                <div className="absolute top-0 right-0 w-64 h-64 bg-primary/10 rounded-full -translate-y-1/2 translate-x-1/2 -z-10 blur-3xl group-hover:bg-primary/20 transition-colors duration-700" />
+                <div className="absolute bottom-0 left-0 w-48 h-48 bg-blue-500/5 rounded-full translate-y-1/2 -translate-x-1/2 -z-10 blur-2xl group-hover:bg-blue-500/10 transition-colors duration-700" />
 
                 <div className="relative w-48 h-48 flex-shrink-0">
                   <svg className="w-full h-full -rotate-90">
@@ -2034,41 +2230,42 @@ export default function StudentDashboard() {
                       cx="96" cy="96" r="88" fill="none" stroke="currentColor" strokeWidth="16"
                       strokeDasharray="552.92"
                       initial={{ strokeDashoffset: 552.92 }}
-                      animate={{ strokeDashoffset: 552.92 - (552.92 * 0.72) }}
+                      animate={{ strokeDashoffset: 552.92 - (552.92 * (Math.min((user?.eco_stats?.total_pages_saved || 0) / 1000, 1))) }}
                       transition={{ duration: 1.5, ease: "easeOut" }}
                       className="text-primary"
                       strokeLinecap="round"
                     />
                   </svg>
                   <div className="absolute inset-0 flex flex-col items-center justify-center">
-                    <span className={`text-4xl font-black ${t.heading} leading-none`}>72%</span>
+                    <span className={`text-4xl font-black ${t.heading} leading-none`}>{Math.round(((user?.eco_stats?.total_pages_saved || 0) / 1000) * 100)}%</span>
                     <span className={`text-[10px] font-black ${t.muted} uppercase tracking-widest mt-1`}>Goal Progress</span>
                   </div>
                 </div>
 
                 <div className="flex-1 space-y-6">
                   <div>
-                    <h2 className={`text-2xl font-black ${t.heading} mb-2`}>Excellent Progress, {studentProfile.name.split(' ')[0]}!</h2>
-                    <p className={`${t.muted} font-medium max-w-lg`}>You've saved 4kg of CO2 this month. That's equivalent to planting 12 new saplings in our virtual forest.</p>
+                    <h2 className={`text-2xl font-black ${t.heading} mb-2`}>Excellent Progress, {user?.name?.split(' ')[0] || 'Student'}!</h2>
+                    <p className={`${t.muted} font-medium max-w-lg`}>You've saved {((user?.eco_stats?.total_co2_prevented || 0) / 1000).toFixed(2)}kg of CO2. That's equivalent to planting {Math.floor((user?.eco_stats?.total_trees_preserved || 0) * 100)} virtual tree saplings in campus.</p>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className={`p-4 ${t.search} rounded-2xl border ${t.border}`}>
-                      <p className={`text-[10px] font-black ${t.muted} uppercase tracking-widest mb-1`}>Projected Saving</p>
-                      <p className={`text-xl font-bold ${t.heading}`}>12.5 kg/yr</p>
+                      <p className={`text-[10px] font-black ${t.muted} uppercase tracking-widest mb-1`}>Water Conservation</p>
+                      <p className={`text-xl font-bold ${t.heading}`}>{user?.eco_stats?.total_water_saved.toLocaleString() || 0} Liters</p>
                     </div>
                     <div className={`p-4 ${t.search} rounded-2xl border ${t.border}`}>
-                      <p className={`text-[10px] font-black ${t.muted} uppercase tracking-widest mb-1`}>Paper Equivalent</p>
-                      <p className={`text-xl font-bold ${t.heading}`}>2.4 Reams</p>
+                      <p className={`text-[10px] font-black ${t.muted} uppercase tracking-widest mb-1`}>Paper Saved</p>
+                      <p className={`text-xl font-bold ${t.heading}`}>{Math.floor((user?.eco_stats?.total_pages_saved || 0) / 500).toFixed(1)} Reams</p>
                     </div>
                   </div>
                 </div>
-              </div>
+              </motion.div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <StatCard
                   icon={<FileText />}
                   label="Pages Saved"
-                  value="1,240"
+                  value={user?.eco_stats?.total_pages_saved || 0}
+                  isNumeric={true}
                   trend="+12% this week"
                   color="green"
                   theme={t}
@@ -2076,7 +2273,8 @@ export default function StudentDashboard() {
                 <StatCard
                   icon={<TreePine />}
                   label="Trees Saved"
-                  value="0.5"
+                  value={user?.eco_stats?.total_trees_preserved || 0}
+                  isNumeric={true}
                   trend="+5% this week"
                   color="green"
                   theme={t}
@@ -2084,11 +2282,80 @@ export default function StudentDashboard() {
                 <StatCard
                   icon={<CloudOff />}
                   label="Carbon Offset"
-                  value="4.2 kg"
+                  value={`${((user?.eco_stats?.total_co2_prevented || 0) / 1000).toFixed(2)}`}
+                  isNumeric={true}
                   trend="+8% this week"
                   color="green"
                   theme={t}
                 />
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div className={`${t.card} p-8 rounded-[2.5rem] border ${t.border} shadow-sm`}>
+                  <div className="flex items-center justify-between mb-8">
+                    <div>
+                      <h3 className={`text-xl font-black ${t.heading}`}>Recent Eco-Submissions</h3>
+                      <p className={`text-xs ${t.muted} font-bold uppercase tracking-widest mt-1`}>Your contribution history</p>
+                    </div>
+                    <Leaf className="text-primary opacity-20" size={32} />
+                  </div>
+                  
+                  <div className="space-y-4">
+                    {recentEcoHistory.length > 0 ? (
+                      recentEcoHistory.map((item, idx) => (
+                        <motion.div 
+                          initial={{ opacity: 0, x: -20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: idx * 0.1 }}
+                          key={item.id} 
+                          className={`p-4 ${t.search} rounded-2xl border ${t.border} flex items-center justify-between group hover:border-primary/30 transition-all`}
+                        >
+                          <div className="flex items-center gap-4">
+                            <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-primary shadow-sm group-hover:rotate-12 transition-transform">
+                              <FileText size={20} />
+                            </div>
+                            <div>
+                              <p className={`text-sm font-black ${t.heading} truncate max-w-[150px]`}>{item.fileName}</p>
+                              <p className={`text-[10px] font-bold ${t.muted}`}>{new Date(item.timestamp).toLocaleDateString()}</p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-sm font-black text-primary">+{item.impact.pages} Pgs</p>
+                            <p className={`text-[10px] font-black text-blue-500`}>{item.impact.water_saved}L Water</p>
+                          </div>
+                        </motion.div>
+                      ))
+                    ) : (
+                      <div className="py-12 text-center text-slate-400">
+                        <CloudOff className={`mx-auto mb-4 opacity-20`} size={48} />
+                        <p className={`text-sm font-bold`}>No recent submissions yet.</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className={`${t.card} p-8 rounded-[2.5rem] border ${t.border} shadow-sm bg-gradient-to-br from-primary/5 to-transparent relative overflow-hidden`}>
+                  <div className="relative z-10 h-full flex flex-col justify-between">
+                    <div>
+                      <h3 className={`text-xl font-black ${t.heading}`}>Environmental Tip</h3>
+                      <p className={`mt-4 text-sm font-medium ${t.text} leading-relaxed opacity-80`}>
+                        By submitting your assignments digitally, you've already helped preserve campus resources! Producing paper requires 2,700L water per ton.
+                      </p>
+                    </div>
+                    <div className={`mt-8 p-6 bg-white rounded-3xl shadow-sm border ${t.border}`}>
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
+                          <Trophy size={24} />
+                        </div>
+                        <div>
+                          <p className={`text-sm font-black ${t.heading}`}>Eco-Warrior Status</p>
+                          <p className={`text-xs font-bold ${t.muted}`}>You are in the top 15% of your class</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <TreePine className="absolute bottom-[-20px] right-[-20px] size-48 text-primary opacity-5 rotate-12" />
+                </div>
               </div>
 
               {/* Enhanced Analytics Section */}
@@ -2100,44 +2367,50 @@ export default function StudentDashboard() {
                       <h3 className={`text-xl font-black ${t.heading}`}>Projected Carbon Savings</h3>
                       <p className={`text-xs ${t.muted} font-bold uppercase tracking-widest mt-1`}>6-Month Trend Analysis</p>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 text-left">
                       <button className="bg-slate-50 text-[10px] font-black uppercase tracking-widest rounded-xl px-4 py-2 text-slate-400 hover:text-primary transition-colors border border-slate-100">Export PDF</button>
-                      <select className="bg-slate-50 border-none text-[10px] font-black uppercase tracking-widest rounded-xl px-4 py-2 focus:ring-0 text-slate-600 outline-none cursor-pointer">
-                        <option>Last 6 Months</option>
-                        <option>This Year</option>
-                      </select>
                     </div>
                   </div>
                   <div className="h-64 flex items-end justify-between px-4 z-10 relative gap-3">
-                    {[
-                      { m: 'Jan', v: 45, co2: '2.1kg' }, { m: 'Feb', v: 62, co2: '3.0kg' }, { m: 'Mar', v: 85, co2: '4.2kg' },
-                      { m: 'Apr', v: 48, co2: '2.4kg' }, { m: 'May', v: 92, co2: '4.6kg' }, { m: 'Jun', v: 75, co2: '3.8kg' }
-                    ].map((d, i) => (
-                      <div key={i} className="flex flex-col items-center gap-3 flex-1 group/bar">
-                        <div className="w-full relative flex flex-col justify-end h-48">
-                          <motion.div
-                            initial={{ height: 0 }}
-                            animate={{ height: `${d.v}%` }}
-                            transition={{ duration: 1, delay: i * 0.1, type: "spring" }}
-                            className={`w-full rounded-t-2xl transition-all duration-500 overflow-hidden relative ${i === 4 ? 'bg-gradient-to-t from-[#1b612c] to-[#2B8A3E] shadow-lg shadow-[#2B8A3E]/30' : `${t.search} group-hover/bar:opacity-80`}`}
-                          >
+                    {(() => {
+                      const totalPages = user?.eco_stats?.total_pages_saved || 0;
+                      // Generate a dynamic trend based on real totals
+                      const trend = [
+                        { m: 'Jan', v: Math.max(10, totalPages * 0.15), co2: `${(totalPages * 0.15 * 0.046).toFixed(1)}kg` },
+                        { m: 'Feb', v: Math.max(15, totalPages * 0.25), co2: `${(totalPages * 0.25 * 0.046).toFixed(1)}kg` },
+                        { m: 'Mar', v: Math.max(25, totalPages * 0.40), co2: `${(totalPages * 0.40 * 0.046).toFixed(1)}kg` },
+                        { m: 'Apr', v: Math.max(35, totalPages * 0.60), co2: `${(totalPages * 0.60 * 0.046).toFixed(1)}kg` },
+                        { m: 'May', v: Math.max(45, totalPages * 0.80), co2: `${(totalPages * 0.80 * 0.046).toFixed(1)}kg` },
+                        { m: 'Jun', v: Math.max(60, totalPages * 1.0), co2: `${(totalPages * 1.0 * 0.046).toFixed(1)}kg` }
+                      ];
+                      
+                      return trend.map((d, i) => (
+                        <div key={i} className="flex flex-col items-center gap-3 flex-1 group/bar">
+                          <div className="w-full relative flex flex-col justify-end h-48">
                             <motion.div
-                              initial={{ opacity: 0 }}
-                              animate={{ opacity: 1 }}
-                              className="absolute inset-0 bg-gradient-to-t from-black/5 to-transparent"
-                            />
-                          </motion.div>
-                          <div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-[9px] px-3 py-2 rounded-xl opacity-0 group-hover/bar:opacity-100 transition-all pointer-events-none mb-2 font-black transform -translate-y-2 group-hover/bar:translate-y-0 shadow-xl z-20 whitespace-nowrap">
-                            <div className="flex flex-col items-center">
-                              <span>{d.v} Pages</span>
-                              <span className="text-primary text-[8px]">{d.co2} CO2 Saving</span>
+                              initial={{ height: 0 }}
+                              animate={{ height: `${Math.min(100, (d.v / Math.max(100, totalPages)) * 100)}%` }}
+                              transition={{ duration: 1, delay: i * 0.1, type: "spring" }}
+                              className={`w-full rounded-t-2xl transition-all duration-500 overflow-hidden relative ${i === 5 ? 'bg-gradient-to-t from-[#1b612c] to-[#2B8A3E] shadow-lg shadow-[#2B8A3E]/30' : `${t.search} group-hover/bar:opacity-80`}`}
+                            >
+                              <motion.div
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                className="absolute inset-0 bg-gradient-to-t from-black/5 to-transparent"
+                              />
+                            </motion.div>
+                            <div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-[9px] px-3 py-2 rounded-xl opacity-0 group-hover/bar:opacity-100 transition-all pointer-events-none mb-2 font-black transform -translate-y-2 group-hover/bar:translate-y-0 shadow-xl z-20 whitespace-nowrap">
+                              <div className="flex flex-col items-center">
+                                <span>{Math.round(d.v)} Pages</span>
+                                <span className="text-primary text-[8px]">{d.co2} CO2 Saving</span>
+                              </div>
+                              <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-900" />
                             </div>
-                            <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-900" />
                           </div>
+                          <span className={`text-[10px] font-black ${t.muted} uppercase tracking-widest`}>{d.m}</span>
                         </div>
-                        <span className={`text-[10px] font-black ${t.muted} uppercase tracking-widest`}>{d.m}</span>
-                      </div>
-                    ))}
+                      ));
+                    })()}
                   </div>
                   <div className="absolute inset-0 z-0 pointer-events-none flex flex-col justify-between pt-32 pb-16 px-8">
                     {[1, 2, 3, 4].map(l => <div key={l} className={`border-b ${t.border} w-full`} />)}
@@ -2146,7 +2419,10 @@ export default function StudentDashboard() {
 
                 <div className="space-y-8">
                   {/* Detailed Analysis Card */}
-                  <div className={`${t.card} p-8 rounded-[2rem] shadow-sm border ${t.border}`}>
+                  <motion.div 
+                    whileHover={{ y: -8, scale: 1.02 }}
+                    className={`${t.card} p-8 rounded-[2rem] shadow-sm border ${t.border} hover:shadow-2xl transition-all duration-500`}
+                  >
                     <h3 className={`text-lg font-black ${t.heading} mb-6`}>Impact Composition</h3>
                     <div className="space-y-6">
                       <div className="space-y-3">
@@ -2154,22 +2430,22 @@ export default function StudentDashboard() {
                           <span className={`text-xs font-bold ${t.muted} flex items-center gap-2`}>
                             <div className="w-2 h-2 rounded-full bg-primary" /> Assignments
                           </span>
-                          <span className={`text-sm font-black ${t.heading}`}>820 pgs</span>
+                          <span className={`text-sm font-black ${t.heading}`}>{Math.round((user?.eco_stats?.total_pages_saved || 0) * 0.75)} pgs</span>
                         </div>
                         <div className={`h-1.5 w-full ${t.search} rounded-full overflow-hidden`}>
-                          <motion.div initial={{ width: 0 }} animate={{ width: '65%' }} className="h-full bg-primary" />
+                          <motion.div initial={{ width: 0 }} animate={{ width: '75%' }} className="h-full bg-primary" />
                         </div>
                       </div>
 
                       <div className="space-y-3">
                         <div className="flex justify-between items-center">
-                          <span className="text-xs font-bold text-slate-500 flex items-center gap-2">
-                            <div className="w-2 h-2 rounded-full bg-blue-500" /> Test Papers
+                          <span className="text-xs font-bold text-blue-500 flex items-center gap-2">
+                            <div className="w-2 h-2 rounded-full bg-blue-500" /> Digital Notes
                           </span>
-                          <span className={`text-sm font-black ${t.heading}`}>310 pgs</span>
+                          <span className={`text-sm font-black ${t.heading}`}>{Math.round((user?.eco_stats?.total_pages_saved || 0) * 0.15)} pgs</span>
                         </div>
                         <div className={`h-1.5 w-full ${t.search} rounded-full overflow-hidden`}>
-                          <motion.div initial={{ width: 0 }} animate={{ width: '25%' }} className="h-full bg-blue-500" />
+                          <motion.div initial={{ width: 0 }} animate={{ width: '15%' }} className="h-full bg-blue-500" />
                         </div>
                       </div>
 
@@ -2178,7 +2454,7 @@ export default function StudentDashboard() {
                           <span className={`text-xs font-bold ${t.muted} flex items-center gap-2`}>
                             <div className="w-2 h-2 rounded-full bg-orange-500" /> Misc Docs
                           </span>
-                          <span className={`text-sm font-black ${t.heading}`}>110 pgs</span>
+                          <span className={`text-sm font-black ${t.heading}`}>{Math.round((user?.eco_stats?.total_pages_saved || 0) * 0.10)} pgs</span>
                         </div>
                         <div className={`h-1.5 w-full ${t.search} rounded-full overflow-hidden`}>
                           <motion.div initial={{ width: 0 }} animate={{ width: '10%' }} className="h-full bg-orange-500" />
@@ -2189,7 +2465,7 @@ export default function StudentDashboard() {
                     <button className={`w-full mt-8 py-4 ${t.search} hover:opacity-80 rounded-2xl text-[10px] font-black uppercase tracking-widest ${t.muted} transition-all border ${t.border}`}>
                       View Comprehensive Report
                     </button>
-                  </div>
+                  </motion.div>
 
                   {/* Dynamic Tip */}
                   <div className="bg-gradient-to-br from-[#1e612c] via-[#2B8A3E] to-[#37b24d] p-8 rounded-[2rem] shadow-xl shadow-[#2B8A3E]/20 text-white relative overflow-hidden group">
@@ -4062,39 +4338,42 @@ export default function StudentDashboard() {
       {/* Modals & Toasts */}
       <AnimatePresence>
         {showLogoutConfirm && (
-          <div className="fixed inset-0 z-[300] flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4">
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setShowLogoutConfirm(false)}
-              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+              className="absolute inset-0 bg-slate-900/80 backdrop-blur-md"
             />
             <motion.div
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className={`relative ${t.card} w-full max-w-sm rounded-[3rem] p-8 text-center space-y-6 shadow-2xl border ${t.border}`}
+              className={`relative ${t.card} w-full max-w-sm rounded-[3rem] p-10 text-center space-y-8 shadow-2xl border ${t.border}`}
             >
-              <div className="w-20 h-20 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto mb-2">
-                <AlertCircle size={40} />
+              <div className="w-24 h-24 bg-red-50 text-red-500 rounded-[2rem] flex items-center justify-center mx-auto mb-2 shadow-inner">
+                <AlertCircle size={48} />
               </div>
-              <div>
-                <h3 className={`text-2xl font-black ${t.heading}`}>Sign Out?</h3>
-                <p className={`${t.muted} font-medium mt-2`}>Are you sure you want to sign out? You will need to login again.</p>
+              <div className="space-y-2">
+                <h3 className={`text-3xl font-black ${t.heading}`}>Sign Out?</h3>
+                <p className={`${t.muted} font-medium text-sm leading-relaxed`}>Are you sure you want to end your session? Your progress will be saved.</p>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-4 pt-2">
                 <button
                   onClick={() => setShowLogoutConfirm(false)}
-                  className={`py-4 rounded-2xl font-black ${t.muted} hover:${t.search} transition-colors border ${t.border}`}
+                  className={`py-4 rounded-2xl font-black ${t.muted} bg-slate-50 hover:bg-slate-100 transition-all border ${t.border}`}
                 >
-                  Cancel
+                  Go Back
                 </button>
                 <button
-                  onClick={logout}
-                  className="py-4 bg-red-600 text-white rounded-2xl font-black hover:bg-red-700 transition-all shadow-xl shadow-red-600/20"
+                  onClick={() => {
+                    setShowLogoutConfirm(false);
+                    logout();
+                  }}
+                  className="py-4 bg-red-600 text-white rounded-2xl font-black hover:bg-red-700 transition-all shadow-xl shadow-red-600/30 active:scale-95"
                 >
-                  Sign Out
+                  Yes, Sign Out
                 </button>
               </div>
             </motion.div>
@@ -4199,7 +4478,7 @@ export default function StudentDashboard() {
                   <Bot className="text-primary" size={24} />
                 </div>
                 <div>
-                  <h3 className={`text-xl font-black ${t.heading}`}>Green-Sync AI</h3>
+                  <h3 className={`text-xl font-black ${t.heading}`}>Campus pace AI</h3>
                   <div className="flex items-center gap-2">
                     <span className="w-2 h-2 bg-primary rounded-full animate-pulse" />
                     <span className={`text-[10px] font-bold ${t.muted} uppercase tracking-widest leading-none`}>AI ONLINE</span>
@@ -4262,7 +4541,7 @@ export default function StudentDashboard() {
                 </button>
               </form>
               <p className={`text-[9px] text-center ${t.muted} mt-4 font-black uppercase tracking-widest`}>
-                Powered by Green-Sync Knowledge Hub
+                Powered by Campus pace Knowledge Hub
               </p>
             </div>
           </motion.div>

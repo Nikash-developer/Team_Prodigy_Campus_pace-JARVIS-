@@ -1,3 +1,6 @@
+// Campus Pace - Ultimate Force Update - 2026-04-11
+// Campus Pace - Global Synchronization & Stabilization Update - 2026-04-11
+// Campus Pace - Stable Upload & Sync Update - 2026-04-11
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './AuthContext';
@@ -8,7 +11,7 @@ import FacultyDashboard from './pages/FacultyDashboard';
 import AdminDashboard from './pages/AdminDashboard';
 import AssignmentManagement from './pages/AssignmentManagement';
 import NoticeAdmin from './pages/NoticeAdmin';
-import AuthCallback from './pages/AuthCallback';
+import DashboardRedirect from './components/DashboardRedirect';
 import { AnimatePresence } from 'motion/react';
 
 function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode, allowedRoles?: string[] }) {
@@ -36,7 +39,7 @@ export default function App() {
           <Routes>
             <Route path="/" element={<LandingPage />} />
             <Route path="/login" element={<LoginPage />} />
-            <Route path="/auth/callback" element={<AuthCallback />} />
+            <Route path="/dashboard" element={<DashboardRedirect />} />
             
             <Route path="/student/*" element={
               <ProtectedRoute allowedRoles={['student']}>
