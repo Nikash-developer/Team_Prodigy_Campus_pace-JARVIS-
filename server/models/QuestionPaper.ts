@@ -13,4 +13,4 @@ const questionPaperSchema = new mongoose.Schema({
     contentType: { type: String }
 }, { timestamps: true });
 
-export default mongoose.models.QuestionPaper || mongoose.model('QuestionPaper', questionPaperSchema);
+export default (mongoose.models.QuestionPaper as mongoose.Model<any>) || mongoose.model<any>('QuestionPaper', questionPaperSchema);

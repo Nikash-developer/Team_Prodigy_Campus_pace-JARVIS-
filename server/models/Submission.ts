@@ -22,4 +22,4 @@ const submissionSchema = new mongoose.Schema({
     submission_timestamp: { type: Date, default: Date.now }
 }, { timestamps: true });
 
-export default mongoose.models.Submission || mongoose.model('Submission', submissionSchema);
+export default (mongoose.models.Submission as mongoose.Model<any>) || mongoose.model<any>('Submission', submissionSchema);

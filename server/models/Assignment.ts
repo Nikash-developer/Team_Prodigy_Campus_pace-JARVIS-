@@ -12,4 +12,4 @@ const assignmentSchema = new mongoose.Schema({
     target_department: { type: String }
 }, { timestamps: true });
 
-export default mongoose.models.Assignment || mongoose.model('Assignment', assignmentSchema);
+export default (mongoose.models.Assignment as mongoose.Model<any>) || mongoose.model<any>('Assignment', assignmentSchema);
