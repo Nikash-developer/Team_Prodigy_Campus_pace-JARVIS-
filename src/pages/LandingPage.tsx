@@ -9,7 +9,8 @@ import {
   Users, UploadCloud, ClipboardCheck, LineChart, X, Calendar,
   Building2, Mail, User, Send
 } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../AuthContext';
 import demoVideo from '../assets/Demo video.mp4';
 const heroLandingImg = 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?auto=format&fit=crop&q=80&w=1600';
 const forestEcoImg = 'https://images.unsplash.com/photo-1448375240586-882707db888b?w=900&q=80&auto=format&fit=crop';
@@ -45,6 +46,17 @@ const AnimatedSection = ({ children, className, id }: { children: React.ReactNod
 };
 
 export default function LandingPage() {
+  const { user, isLoading } = useAuth();
+  const navigate = useNavigate();
+
+  React.useEffect(() => {
+    if (!isLoading && user) {
+      if (user.role === 'admin') navigate('/admin');
+      else if (user.role === 'faculty' || user.role === 'hod') navigate('/faculty');
+      else navigate('/student');
+    }
+  }, [user, isLoading, navigate]);
+
   const [isWatchDemoOpen, setIsWatchDemoOpen] = useState(false);
   const [isScheduleDemoOpen, setIsScheduleDemoOpen] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
