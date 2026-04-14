@@ -125,7 +125,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const roleFromMetadata = session.user.user_metadata?.role;
         
         // We prioritize the role you JUST clicked on the login screen!
-        const finalRole = pendingRole || roleFromTable || roleFromMetadata || 'student';
+        const finalRole = (pendingRole || roleFromTable || roleFromMetadata || 'student').toLowerCase();
 
         // Update the database if the role needs changing
         if (userData && pendingRole && pendingRole !== userData.role && (!dbError || dbError.code !== 'PGRST116')) {

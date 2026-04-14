@@ -87,7 +87,7 @@ export default function LoginPage() {
           id: user.id,
           email: user.email || '',
           name: userData?.name || userData?.full_name || user.user_metadata?.full_name || 'User',
-          role: (userData?.role || user.user_metadata?.role || 'student') as any,
+          role: (userData?.role || user.user_metadata?.role || 'student').toLowerCase() as any,
           department: userData?.department || user.user_metadata?.department || '',
           avatar: userData?.avatar || user.user_metadata?.avatar_url
         };
