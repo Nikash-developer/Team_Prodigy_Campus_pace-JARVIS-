@@ -7,17 +7,7 @@ import {
 } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
-import { auth, db } from '../lib/firebase';
-import {
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  sendPasswordResetEmail,
-  updateProfile,
-  GoogleAuthProvider,
-  GithubAuthProvider,
-  signInWithPopup
-} from 'firebase/auth';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { supabase } from '../lib/supabase';
 import TreeAnimation from '../components/TreeAnimation';
 
 
@@ -50,36 +40,48 @@ export default function LoginPage() {
 
     try {
       if (view === 'login') {
-        const userCredential = await signInWithEmailAndPassword(auth, email, password);
-        const firebaseUser = userCredential.user;
+        const { data, error: authError } = await supabase.auth.signInWithPassword({
+          email,
+          password
+        });
 
-        const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
-        if (userDoc.exists()) {
-          const userData = userDoc.data();
+        if (authError) throw authError;
+
+        const supabaseUser = data.user!;
+
+        // Fetch profile from Supabase
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', supabaseUser.id)
+          .single();
+
+        if (profile) {
           login({
-            id: firebaseUser.uid,
-            email: firebaseUser.email || '',
-            name: userData.name || 'User',
-            role: userData.role || 'student',
-            department: userData.department || '',
-            avatar: userData.avatar
+            id: supabaseUser.id,
+            email: supabaseUser.email || '',
+            name: profile.name || 'User',
+            role: profile.role || 'student',
+            department: profile.department || '',
+            avatar: profile.avatar
           } as any);
 
-          if (userData.role === 'student') navigate('/student');
-          else if (userData.role === 'admin') navigate('/admin');
+          if (profile.role === 'student') navigate('/student');
+          else if (profile.role === 'admin') navigate('/admin');
           else navigate('/faculty');
         } else {
           navigate('/student');
         }
+
       } else if (view === 'forgot-password') {
-        await sendPasswordResetEmail(auth, email);
+        const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: `${window.location.origin}/reset-password`
+        });
+        if (resetError) throw resetError;
         setSuccess('Password reset link sent to your email!');
+
       } else {
-        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-        const firebaseUser = userCredential.user;
-
-        await updateProfile(firebaseUser, { displayName: fullName });
-
+        // Sign up
         const profileData = {
           name: fullName,
           email: email,
@@ -95,7 +97,27 @@ export default function LoginPage() {
           }
         };
 
-        await setDoc(doc(db, 'users', firebaseUser.uid), profileData);
+        const { data, error: signUpError } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: {
+              full_name: fullName,
+              role: role,
+              department: department
+            }
+          }
+        });
+
+        if (signUpError) throw signUpError;
+
+        const supabaseUser = data.user!;
+
+        // Insert profile into 'profiles' table
+        await supabase.from('profiles').upsert({
+          id: supabaseUser.id,
+          ...profileData
+        });
 
         setSuccess(`Registration successful! Welcome to Green-Sync.`);
         setTimeout(() => {
@@ -106,12 +128,14 @@ export default function LoginPage() {
     } catch (err: any) {
       console.error('Auth error:', err);
       let msg = 'Authentication failed. Please try again.';
-      if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') {
+      if (err.message?.includes('Invalid login credentials') || err.message?.includes('invalid_credentials')) {
         msg = 'Invalid email or password.';
-      } else if (err.code === 'auth/email-already-in-use') {
+      } else if (err.message?.includes('User already registered') || err.message?.includes('already registered')) {
         msg = 'This email is already registered.';
-      } else if (err.code === 'auth/network-request-failed') {
+      } else if (err.message?.includes('Network') || err.message?.includes('fetch')) {
         msg = 'Network error. Please check your connection.';
+      } else if (err.message) {
+        msg = err.message;
       }
       setError(msg);
     } finally {
@@ -122,63 +146,32 @@ export default function LoginPage() {
   const handleSocialSignIn = async (providerType: 'google' | 'github') => {
     setIsLoading(true);
     setError('');
-    const provider = providerType === 'google' ? new GoogleAuthProvider() : new GithubAuthProvider();
 
     try {
-      const result = await signInWithPopup(auth, provider);
-      const firebaseUser = result.user;
-
-      const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
-
-      if (!userDoc.exists()) {
-        const profileData = {
-          name: firebaseUser.displayName || 'User',
-          email: firebaseUser.email || '',
-          role: role, // Use the selected role (Student or Faculty) from the UI
-          department: 'General',
-          idNumber: 'SOCIAL-' + firebaseUser.uid.substring(0, 5),
-          createdAt: new Date().toISOString(),
-          eco_stats: {
-            total_pages_saved: 0,
-            total_water_saved: 0,
-            total_co2_prevented: 0,
+      const { error: oauthError } = await supabase.auth.signInWithOAuth({
+        provider: providerType,
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback`,
+          queryParams: {
+            // pass role as hint (stored in metadata after sign-in via callback)
           }
-        };
-        await setDoc(doc(db, 'users', firebaseUser.uid), profileData);
-        login({ id: firebaseUser.uid, ...profileData } as any);
-      } else {
-        const userData = userDoc.data();
-        login({ id: firebaseUser.uid, ...userData } as any);
-      }
+        }
+      });
 
-      // Navigate based on the intent (selected role tab)
-      if (role === 'student') navigate('/student');
-      else if (role === 'faculty') navigate('/faculty');
-      else if (role === 'admin') navigate('/admin');
-      else {
-        // Fallback to DB role if role state is somehow lost
-        const userData = (await getDoc(doc(db, 'users', firebaseUser.uid))).data();
-        if (userData?.role === 'student') navigate('/student');
-        else if (userData?.role === 'admin') navigate('/admin');
-        else navigate('/faculty');
-      }
+      if (oauthError) throw oauthError;
+      // OAuth will redirect the user, so no navigation needed here
 
     } catch (err: any) {
       console.error('Social Login Error:', err);
       let msg = 'Social login failed. Please try again.';
-      if (err.code === 'auth/operation-not-allowed') {
-        msg = 'This sign-in provider is not enabled in Firebase Console.';
-      } else if (err.code === 'auth/popup-closed-by-user') {
-        msg = 'Login popup was closed before completion.';
-      } else if (err.code === 'auth/unauthorized-domain') {
-        msg = 'This domain is not authorized for Firebase Auth. Check your Firebase console settings.';
-      } else if (err.code === 'auth/cancelled-popup-request') {
-        msg = 'Sign-in was cancelled. Please try again.';
-      } else if (err.code === 'auth/popup-blocked') {
-        msg = 'Sign-in popup was blocked by your browser. Please allow popups for this site.';
+      if (err.message?.includes('provider is not enabled')) {
+        msg = 'This sign-in provider is not enabled. Please check Supabase Auth settings.';
+      } else if (err.message?.includes('cancelled') || err.message?.includes('closed')) {
+        msg = 'Login was cancelled. Please try again.';
+      } else if (err.message) {
+        msg = err.message;
       }
       setError(msg);
-    } finally {
       setIsLoading(false);
     }
   };
