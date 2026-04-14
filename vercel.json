@@ -1,5 +1,4 @@
 {
-  "repoSync": "2026-04-11",
   "version": 2,
   "rewrites": [
     {
@@ -20,6 +19,5 @@
       "includeFiles": "server/**,server.ts",
       "excludeFiles": "{node_modules/.cache/**,dist/**,uploads/**,Public/**}"
     }
-  },
-  "refreshDate": "2026-04-11"
+  }
 }
